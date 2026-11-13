@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod protocol;
+pub mod reader_prefs;
 
 use crate::commands::{AppSettings, AppState};
 use crate::protocol::ProtocolHandler;
@@ -102,6 +103,7 @@ pub fn run() {
                 connected: AtomicBool::new(false),
                 settings: StdMutex::new(settings.clone()),
                 active_downloads: StdMutex::new(HashMap::new()),
+                reader_prefs_lock: StdMutex::new(()),
                 #[cfg(not(target_os = "android"))]
                 desktop_server: AsyncMutex::new(None),
                 #[cfg(bookferry_e2e)]
@@ -171,6 +173,15 @@ pub fn run() {
         commands::rotate_pairing_qr,
         commands::list_paired_devices,
         commands::revoke_paired_device,
+        commands::get_reader_prefs,
+        commands::save_reader_prefs,
+        commands::reset_reader_prefs,
+        commands::set_default_reader_prefs,
+        commands::save_reader_preset,
+        commands::delete_reader_preset,
+        commands::save_progress_prefs,
+        commands::set_fullscreen,
+        commands::is_fullscreen,
     ]);
 
     #[cfg(bookferry_e2e)]
@@ -193,6 +204,15 @@ pub fn run() {
         commands::rotate_pairing_qr,
         commands::list_paired_devices,
         commands::revoke_paired_device,
+        commands::get_reader_prefs,
+        commands::save_reader_prefs,
+        commands::reset_reader_prefs,
+        commands::set_default_reader_prefs,
+        commands::save_reader_preset,
+        commands::delete_reader_preset,
+        commands::save_progress_prefs,
+        commands::set_fullscreen,
+        commands::is_fullscreen,
         commands::e2e_pair_second_client,
         commands::e2e_wait_peer_position,
         commands::e2e_peer_set_position,

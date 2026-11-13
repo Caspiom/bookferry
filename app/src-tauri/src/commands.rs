@@ -1,4 +1,5 @@
 use crate::protocol::ProtocolHandler;
+use crate::reader_prefs::{self, ReaderPrefsView};
 #[cfg(bookferry_e2e)]
 use bookferry_client::PositionOrigin;
 use bookferry_client::{Client, DownloadReport, PairedServerInfo, RescanSummary, ResumeDecision};
@@ -90,6 +91,8 @@ pub struct AppState {
     pub connected: AtomicBool,
     pub settings: StdMutex<AppSettings>,
     pub active_downloads: StdMutex<HashMap<String, watch::Sender<bool>>>,
+    /// Serializa os read-modify-write de `reader_prefs.json`.
+    pub reader_prefs_lock: StdMutex<()>,
     #[cfg(not(target_os = "android"))]
     pub desktop_server: AsyncMutex<Option<DesktopServerRuntime>>,
     #[cfg(bookferry_e2e)]
@@ -1130,4 +1133,121 @@ pub async fn e2e_finish(report_json: String) -> Result<(), String> {
         std::process::exit(0);
     });
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Preferencias de leitura (ver `reader_prefs.rs`)
+// ---------------------------------------------------------------------------
+
+/// Executa `f` sob o mutex que serializa o acesso a `reader_prefs.json`.
+fn with_prefs_lock<T>(state: &AppState, f: impl FnOnce(&Path) -> T) -> T {
+    let _guard = state
+        .reader_prefs_lock
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    f(&state.data_dir)
+}
+
+#[tauri::command]
+pub async fn get_reader_prefs(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+) -> Result<ReaderPrefsView, String> {
+    with_prefs_lock(&state, |dir| reader_prefs::op_get(dir, &book_id))
+}
+
+#[tauri::command]
+pub async fn save_reader_prefs(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    prefs: serde_json::Value,
+) -> Result<ReaderPrefsView, String> {
+    with_prefs_lock(&state, |dir| {
+        reader_prefs::op_save_book(dir, &book_id, &prefs)
+    })
+}
+
+#[tauri::command]
+pub async fn reset_reader_prefs(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+) -> Result<ReaderPrefsView, String> {
+    with_prefs_lock(&state, |dir| reader_prefs::op_reset_book(dir, &book_id))
+}
+
+#[tauri::command]
+pub async fn set_default_reader_prefs(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    prefs: serde_json::Value,
+) -> Result<ReaderPrefsView, String> {
+    with_prefs_lock(&state, |dir| {
+        reader_prefs::op_set_default(dir, &book_id, &prefs)
+    })
+}
+
+#[tauri::command]
+pub async fn save_reader_preset(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    name: String,
+    prefs: serde_json::Value,
+) -> Result<ReaderPrefsView, String> {
+    with_prefs_lock(&state, |dir| {
+        reader_prefs::op_save_preset(dir, &book_id, &name, &prefs)
+    })
+}
+
+#[tauri::command]
+pub async fn delete_reader_preset(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    name: String,
+) -> Result<ReaderPrefsView, String> {
+    with_prefs_lock(&state, |dir| {
+        reader_prefs::op_delete_preset(dir, &book_id, &name)
+    })
+}
+
+#[tauri::command]
+pub async fn save_progress_prefs(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    progress: serde_json::Value,
+) -> Result<ReaderPrefsView, String> {
+    with_prefs_lock(&state, |dir| {
+        reader_prefs::op_save_progress(dir, &book_id, &progress)
+    })
+}
+
+/// Liga/desliga tela cheia. No Android a barra de sistema e controlada pela Activity,
+/// entao aqui e um no-op.
+#[tauri::command]
+pub async fn set_fullscreen(fullscreen: bool, window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(not(target_os = "android"))]
+    {
+        window
+            .set_fullscreen(fullscreen)
+            .map_err(|e| format!("erro ao alternar tela cheia: {e}"))
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = (fullscreen, window);
+        Ok(())
+    }
+}
+
+#[tauri::command]
+pub async fn is_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String> {
+    #[cfg(not(target_os = "android"))]
+    {
+        window
+            .is_fullscreen()
+            .map_err(|e| format!("erro ao consultar tela cheia: {e}"))
+    }
+    #[cfg(target_os = "android")]
+    {
+        let _ = window;
+        Ok(false)
+    }
 }

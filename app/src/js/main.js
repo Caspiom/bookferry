@@ -9,7 +9,8 @@ import {
 import { mountCbzReader } from './readers/cbz.js';
 import { mountEpubReader } from './readers/epub.js';
 import { mountPdfReader } from './readers/pdf.js';
-import { formatBytes, formatPercent } from './state.js';
+import { createProgressBar, mountAaPanel, setReaderChromeTheme } from './reader-ui.js';
+import { formatBytes, formatPercent, sanitizeProgressPrefs } from './state.js';
 import {
   applyTheme,
   downloadModal,
@@ -29,6 +30,8 @@ const appState = {
   searchQuery: '',
   activeBook: null,
   activeReader: null,
+  aaPanel: null,
+  progressBar: null,
 };
 
 function showScreen(screenId) {
@@ -166,22 +169,39 @@ export async function openBookFlow(book) {
   showScreen('reader-screen');
 
   try {
-    if (appState.activeReader) {
-      await appState.activeReader.destroy();
-      appState.activeReader = null;
-    }
+    await teardownReader();
 
     const fmt = String(readyBook.format).toLowerCase();
+    const bar = appState.progressBar;
+    bar?.reset();
+    // Preferências de leitura (por livro / padrão / presets / itens do rodapé), validadas no Rust.
+    let prefsView = null;
+    try {
+      prefsView = await api.getReaderPrefs(readyBook.book_id);
+    } catch (_) {}
+    bar?.setItems(sanitizeProgressPrefs(prefsView?.progress));
+    const hooks = { onProgress: (info) => bar?.update(info) };
+
     if (fmt === 'epub') {
-      appState.activeReader = await mountEpubReader({
+      const reader = await mountEpubReader({
         book: readyBook,
         initialPosition,
-        settings: appState.status?.settings,
+        prefs: prefsView?.prefs,
+        appTheme: appState.status?.settings?.theme || 'auto',
         viewportEl,
-        statusLabelEl,
         tocListEl,
         onSavePosition: saveReaderPosition,
+        hooks: { ...hooks, onThemeChange: setReaderChromeTheme },
       });
+      appState.activeReader = reader;
+      if (reader && prefsView) {
+        appState.aaPanel = mountAaPanel({
+          bookId: readyBook.book_id,
+          view: prefsView,
+          reader,
+          onProgressPrefs: (p) => bar?.setItems(p),
+        });
+      }
     } else if (fmt === 'pdf') {
       appState.activeReader = await mountPdfReader({
         book: readyBook,
@@ -189,6 +209,7 @@ export async function openBookFlow(book) {
         viewportEl,
         statusLabelEl,
         onSavePosition: saveReaderPosition,
+        hooks,
       });
     } else if (fmt === 'cbz') {
       appState.activeReader = await mountCbzReader({
@@ -197,6 +218,7 @@ export async function openBookFlow(book) {
         viewportEl,
         statusLabelEl,
         onSavePosition: saveReaderPosition,
+        hooks,
       });
     } else {
       throw new Error(`Formato não suportado: ${readyBook.format}`);
@@ -207,13 +229,26 @@ export async function openBookFlow(book) {
   }
 }
 
-export async function closeActiveReader() {
+async function teardownReader() {
+  if (appState.aaPanel) {
+    try {
+      await appState.aaPanel.flush();
+    } catch (_) {}
+    appState.aaPanel.destroy();
+    appState.aaPanel = null;
+  }
   if (appState.activeReader) {
     try {
       await appState.activeReader.destroy();
     } catch (_) {}
     appState.activeReader = null;
   }
+  setReaderChromeTheme(null);
+}
+
+export async function closeActiveReader() {
+  await teardownReader();
+  appState.progressBar?.reset();
   appState.activeBook = null;
   document.getElementById('toc-drawer')?.classList.add('hidden');
   showScreen('library-screen');
@@ -330,11 +365,9 @@ function setupEventListeners() {
   document.getElementById('btn-reader-next')?.addEventListener('click', () => {
     appState.activeReader?.next?.();
   });
-  document.getElementById('btn-font-dec')?.addEventListener('click', () => {
-    appState.activeReader?.changeFontSize?.(-2);
-  });
-  document.getElementById('btn-font-inc')?.addEventListener('click', () => {
-    appState.activeReader?.changeFontSize?.(2);
+  appState.progressBar = createProgressBar({
+    getReader: () => appState.activeReader,
+    bookId: () => appState.activeBook?.book_id || null,
   });
   document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
     appState.activeReader?.zoomOut?.();
@@ -358,6 +391,13 @@ function setupEventListeners() {
   // Atalhos de teclado no leitor
   window.addEventListener('keydown', (ev) => {
     if (!appState.activeReader) return;
+    if (ev.key === 'Escape' && appState.aaPanel?.isOpen()) {
+      ev.preventDefault();
+      appState.aaPanel.close();
+      return;
+    }
+    const tag = ev.target?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     if (ev.key === 'ArrowRight' || ev.key === 'PageDown') {
       ev.preventDefault();
       appState.activeReader.next?.();
@@ -443,9 +483,7 @@ function setupEventListeners() {
         theme,
       });
       applyTheme(theme);
-      if (appState.activeReader?.setTheme) {
-        appState.activeReader.setTheme(theme);
-      }
+      appState.activeReader?.setAppTheme?.(theme);
       await refreshStatus();
       showToast('Preferências salvas.');
     } catch (err) {
@@ -613,6 +651,102 @@ async function runE2eAutomation() {
     results.steps.epub_sse_to_peer = epubPeerPos;
     results.screenshots.push(await api.e2eCaptureScreenshot('02-reader-epub'));
 
+    // 1b. Painel "Aa": muda estilo ao vivo, confere no DOM do livro, confirma que o ponto de
+    // leitura (CFI) não mudou e que as preferências persistem por livro.
+    {
+      const aa = {};
+      const setRange = (id, value) => {
+        const el = document.getElementById(id);
+        el.value = String(value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      const setSelect = (id, value) => {
+        const el = document.getElementById(id);
+        el.value = value;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const bookStyle = () => {
+        const doc = appState.activeReader.getContentDoc();
+        const cs = doc.defaultView.getComputedStyle(doc.body);
+        return {
+          fontSize: cs.fontSize,
+          lineHeight: cs.lineHeight,
+          background: cs.backgroundColor,
+          color: cs.color,
+          fontFamily: cs.fontFamily,
+          gap: document.querySelector('foliate-view').renderer.getAttribute('gap'),
+        };
+      };
+      const locatorBefore = appState.activeReader.getCurrentState().locator;
+      document.getElementById('btn-reader-aa').click();
+      await sleep(200);
+      aa.panel_open = !document.getElementById('aa-panel').classList.contains('hidden');
+      aa.before = bookStyle();
+
+      setRange('aa-font-size', 26);
+      setRange('aa-line-height', 2);
+      setRange('aa-margin', 12);
+      setSelect('aa-font-family', 'mono');
+      setSelect('aa-align', 'left');
+      document.querySelector('.aa-theme[data-theme="sepia"]').click();
+      await sleep(1500);
+      aa.after_sepia = bookStyle();
+      results.screenshots.push(await api.e2eCaptureScreenshot('10-epub-aa-panel'));
+
+      document.querySelector('.aa-theme[data-theme="black"]').click();
+      await sleep(1200);
+      aa.after_black = bookStyle();
+      aa.chrome_theme = document.getElementById('reader-screen').dataset.readerTheme;
+      aa.chrome_bg = getComputedStyle(document.getElementById('reader-screen')).backgroundColor;
+      results.screenshots.push(await api.e2eCaptureScreenshot('11-epub-black'));
+
+      const locatorAfter = appState.activeReader.getCurrentState().locator;
+      aa.cfi_unchanged = locatorBefore === locatorAfter;
+      aa.anchor_visible = appState.activeReader.anchorIsVisible(locatorBefore);
+
+      // Fecha o painel com Esc e o leitor; espera o salvamento por livro.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await sleep(150);
+      aa.panel_closed_by_esc = document.getElementById('aa-panel').classList.contains('hidden');
+      aa.reader_still_open = Boolean(appState.activeReader);
+      await sleep(600);
+      await closeActiveReader();
+      await sleep(400);
+      await openBookFlow(epubBook);
+      await sleep(1500);
+      aa.after_reopen = bookStyle();
+      aa.reopen_cfi_ok = appState.activeReader.anchorIsVisible(locatorBefore);
+      const other = await api.getReaderPrefs(pdfBook.book_id);
+      const own = await api.getReaderPrefs(epubBook.book_id);
+      aa.other_book_is_custom = other.is_custom;
+      aa.other_book_font_size = other.prefs.font_size;
+      aa.own_book_is_custom = own.is_custom;
+      aa.own_book_font_size = own.prefs.font_size;
+      aa.footer_text = document.getElementById('reader-status-label').textContent;
+      aa.footer_valuenow = Number(document.getElementById('reader-progress').getAttribute('aria-valuenow'));
+      results.steps.epub_aa_panel = aa;
+
+      const problems = [];
+      if (!aa.panel_open) problems.push('painel Aa não abriu');
+      if (aa.after_sepia.fontSize !== '26px') problems.push(`tamanho ${aa.after_sepia.fontSize}`);
+      if (aa.after_sepia.lineHeight !== '52px') problems.push(`entrelinha ${aa.after_sepia.lineHeight}`);
+      if (aa.after_sepia.gap !== '12%') problems.push(`margem ${aa.after_sepia.gap}`);
+      if (!/mono|Mono|Consolas|Menlo/.test(aa.after_sepia.fontFamily)) problems.push('fonte mono');
+      if (aa.after_sepia.background !== 'rgb(245, 236, 215)') problems.push(`sépia ${aa.after_sepia.background}`);
+      if (aa.after_black.background !== 'rgb(0, 0, 0)') problems.push(`preto ${aa.after_black.background}`);
+      if (aa.chrome_theme !== 'black' || aa.chrome_bg !== 'rgb(0, 0, 0)') problems.push('chrome não ficou preto');
+      if (!aa.cfi_unchanged || !aa.anchor_visible) problems.push('o ponto de leitura mudou ao mudar o estilo');
+      if (!aa.panel_closed_by_esc || !aa.reader_still_open) problems.push('Esc deveria fechar só o painel');
+      if (aa.after_reopen.fontSize !== '26px' || aa.after_reopen.background !== 'rgb(0, 0, 0)') {
+        problems.push('preferências do livro não persistiram');
+      }
+      if (!aa.reopen_cfi_ok) problems.push('reabrir não voltou ao mesmo ponto');
+      if (aa.other_book_is_custom || aa.other_book_font_size === 26) problems.push('prefs vazaram para outro livro');
+      if (!aa.own_book_is_custom) problems.push('livro sem prefs próprias');
+      if (!/%/.test(aa.footer_text) || !(aa.footer_valuenow > 0)) problems.push(`rodapé EPUB: ${aa.footer_text}`);
+      if (problems.length) throw new Error(`Painel Aa: ${problems.join('; ')} :: ${JSON.stringify(aa)}`);
+    }
+
     // O "celular" escreve posição mais nova no livro EPUB aberto -> app deve mostrar toast
     const epubState = appState.activeReader.getCurrentState();
     await api.e2ePeerSetPosition(
@@ -640,6 +774,37 @@ async function runE2eAutomation() {
     const cbzPeerPos = await api.e2eWaitPeerPosition(cbzBook.book_id, 25.0, 6000, 'page:2');
     results.steps.cbz_sse_to_peer = cbzPeerPos;
     results.screenshots.push(await api.e2eCaptureScreenshot('04-reader-cbz'));
+    {
+      const label = document.getElementById('reader-status-label');
+      const bar = document.getElementById('reader-progress');
+      const cbz = { text_fmt0: label.textContent };
+      label.click();
+      cbz.text_fmt1 = label.textContent;
+      label.click();
+      cbz.text_fmt2 = label.textContent;
+      label.click();
+      const rect = bar.getBoundingClientRect();
+      const fire = (type, x) =>
+        bar.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: rect.top + 5, pointerId: 1 }));
+      fire('pointerdown', rect.right - 1);
+      fire('pointerup', rect.right - 1);
+      await sleep(400);
+      cbz.after_seek_end = label.textContent;
+      fire('pointerdown', rect.left + 1);
+      fire('pointerup', rect.left + 1);
+      await sleep(400);
+      cbz.after_seek_start = label.textContent;
+      results.steps.cbz_progress_bar = cbz;
+      if (!/^Pág\. 2 \/ 6$/.test(cbz.text_fmt0) || !/%$/.test(cbz.text_fmt1) || !/falta/.test(cbz.text_fmt2)) {
+        throw new Error(`Rodapé CBZ: ${JSON.stringify(cbz)}`);
+      }
+      if (cbz.after_seek_end !== 'Pág. 6 / 6' || cbz.after_seek_start !== 'Pág. 1 / 6') {
+        throw new Error(`Seek pela barra (CBZ): ${JSON.stringify(cbz)}`);
+      }
+      // Volta para a página 2: o resto do roteiro depende da posição salva.
+      await appState.activeReader.seekPage(2);
+      await sleep(1800);
+    }
 
     await closeActiveReader();
     await sleep(400);
@@ -689,7 +854,7 @@ async function runE2eAutomation() {
     results.ok = true;
     await api.e2eFinish(results);
   } catch (err) {
-    results.error = String(err?.stack || err);
+    results.error = `${err?.message || err} | ${err?.stack || ''}`;
     await api.e2eFinish(results);
   }
 }

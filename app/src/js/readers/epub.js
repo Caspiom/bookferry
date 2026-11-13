@@ -5,73 +5,42 @@
 
 import '../../vendor/foliate-js/view.js';
 import * as CFI from '../../vendor/foliate-js/epubcfi.js';
-import { api, getBookFileUrl } from '../api.js';
-import { createDebouncer, formatPercent, isEpubCfi } from '../state.js';
-
-function buildEpubStyles(fontSizePx, theme) {
-  const prefersDark =
-    typeof window !== 'undefined' &&
-    window.matchMedia &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const effectiveTheme =
-    !theme || theme === 'auto' ? (prefersDark ? 'dark' : 'light') : theme;
-
-  let colorsCss = `
-    :root { color-scheme: light; }
-    html, body {
-      background: #ffffff !important;
-      color: #1c2026 !important;
-    }
-  `;
-  if (effectiveTheme === 'dark') {
-    colorsCss = `
-      :root { color-scheme: dark; }
-      html, body {
-        background: #141821 !important;
-        color: #eef2f8 !important;
-      }
-      a { color: #7aa2f7 !important; }
-    `;
-  } else if (effectiveTheme === 'sepia') {
-    colorsCss = `
-      :root { color-scheme: light; }
-      html, body {
-        background: #f5ecd7 !important;
-        color: #3c2f20 !important;
-      }
-      a { color: #8c5220 !important; }
-    `;
-  }
-
-  return `
-    ${colorsCss}
-    html, body {
-      font-size: ${fontSizePx}px !important;
-      line-height: 1.65 !important;
-      text-align: justify;
-      margin: 0 !important;
-    }
-    p {
-      margin: 0 0 0.75em 0;
-    }
-  `;
-}
+import { getBookFileUrl } from '../api.js';
+import { createTapDispatcher } from '../gestures.js';
+import {
+  buildEpubCss,
+  createDebouncer,
+  epubLayoutAttrs,
+  isEpubCfi,
+  resolveEffectiveTheme,
+  resolveTapZone,
+  sanitizeReaderPrefs,
+} from '../state.js';
 
 export async function mountEpubReader({
   book,
   initialPosition,
-  settings,
+  prefs: initialPrefs,
+  appTheme = 'auto',
   viewportEl,
-  statusLabelEl,
   tocListEl,
   onSavePosition,
+  hooks = {},
 }) {
   viewportEl.innerHTML = '<div class="reader-loading">Carregando EPUB...</div>';
 
-  let rawSetting = Number(settings?.default_font_size) || 18;
-  let basePx = rawSetting > 48 ? Math.round((rawSetting / 100) * 16) : rawSetting;
-  basePx = Math.max(12, Math.min(36, basePx));
-  let currentTheme = settings?.theme || 'auto';
+  let prefs = sanitizeReaderPrefs(initialPrefs);
+  const prefersDark = () =>
+    typeof window !== 'undefined' &&
+    Boolean(window.matchMedia) &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const effectiveTheme = () => resolveEffectiveTheme(prefs.theme, appTheme, prefersDark());
+  // Enquanto o estilo muda, os `relocate` programáticos (reflow) não podem mover nem salvar a
+  // posição: o ponto de leitura continua sendo o último CFI "do usuário".
+  let restyling = false;
+  let restyleTimer = null;
+  let applying = false;
+  let pendingPrefs = null;
 
   let currentLocator = initialPosition?.locator || '';
   let currentPercent = Number(initialPosition?.percent) || 0;
@@ -103,7 +72,55 @@ export async function mountEpubReader({
   viewportEl.appendChild(view);
 
   await view.open(file);
-  view.renderer?.setStyles?.(buildEpubStyles(basePx, currentTheme));
+  const renderer = view.renderer;
+
+  function applyLayoutAndStyles() {
+    for (const [attr, value] of Object.entries(epubLayoutAttrs(prefs))) {
+      renderer?.setAttribute?.(attr, value);
+    }
+    renderer?.setStyles?.(buildEpubCss(prefs, effectiveTheme()));
+    // `gap` só atualiza uma variável CSS: força o re-layout (mantém a âncora atual).
+    renderer?.render?.();
+    hooks.onThemeChange?.(effectiveTheme());
+  }
+  applyLayoutAndStyles();
+
+  const bookDirection = () => (view.book?.dir === 'rtl' ? 'rtl' : 'ltr');
+
+  // Toque/clique no documento do livro (iframe do foliate) -> mesma lógica de zonas do app.
+  const tapper = createTapDispatcher({
+    delayMs: 220,
+    onSingle: ({ x }) => {
+      const width = view.getBoundingClientRect().width;
+      const zone = resolveTapZone(x, width, bookDirection());
+      if (zone === 'toggle') {
+        hooks.onToggleChrome?.();
+        return;
+      }
+      suppressSave = false;
+      (zone === 'next' ? view.next() : view.prev())?.catch?.(() => {});
+    },
+  });
+  view.addEventListener('load', (ev) => {
+    const doc = ev.detail?.doc;
+    if (!doc) return;
+    doc.addEventListener('keydown', (kev) => hooks.onKey?.(kev));
+    doc.addEventListener('click', (cev) => {
+      hooks.onDismissOverlays?.();
+      // Link do livro (o foliate trata e dá preventDefault) ou controle: não vira navegação.
+      if (cev.defaultPrevented || cev.target?.closest?.('a[href], button, input, select, textarea')) {
+        return;
+      }
+      // Seleção de texto em andamento/feita: não vira navegação nem alterna o imersivo.
+      const sel = doc.getSelection?.();
+      if (sel && sel.type === 'Range' && sel.toString().length > 0) return;
+      // Coordenadas do iframe (largo, rolado por página) -> coordenadas da view visível.
+      const frame = doc.defaultView?.frameElement;
+      const frameLeft = frame ? frame.getBoundingClientRect().left : 0;
+      const viewLeft = view.getBoundingClientRect().left;
+      tapper.tap(frameLeft + cev.clientX - viewLeft, cev.clientY);
+    });
+  });
 
   // Preenche o sumário (TOC)
   if (tocListEl) {
@@ -138,9 +155,35 @@ export async function mountEpubReader({
     }
   }
 
+  function emitProgress(d) {
+    if (!hooks.onProgress) return;
+    // Capítulo = seção (arquivo) do EPUB: só é calculado de forma confiável o que o paginator
+    // sabe (página atual/total da seção carregada). Sem isso (layout fixo) os itens são omitidos.
+    let chapterFraction = null;
+    let pagesLeftInChapter = null;
+    const pages = Number(renderer?.pages);
+    const page = Number(renderer?.page);
+    if (Number.isFinite(pages) && Number.isFinite(page) && pages >= 3) {
+      const textPages = pages - 2;
+      const cur = Math.max(1, Math.min(textPages, page));
+      chapterFraction = cur / textPages;
+      pagesLeftInChapter = textPages - cur;
+    }
+    hooks.onProgress({
+      kind: 'epub',
+      chapterTitle: d.tocItem?.label || '',
+      bookFraction: typeof d.fraction === 'number' ? d.fraction : null,
+      chapterFraction,
+      pagesLeftInChapter,
+      totalChapters: d.section?.total ?? null,
+    });
+  }
+
   view.addEventListener('relocate', (ev) => {
     if (destroyed) return;
     const d = ev.detail || {};
+    emitProgress(d);
+    if (restyling) return;
     if (d.cfi) {
       try {
         currentLocator = d.cfi.includes(',') ? CFI.collapse(d.cfi) : d.cfi;
@@ -154,11 +197,6 @@ export async function mountEpubReader({
       currentPercent = Math.round(rawPct * 100) / 100;
     }
     currentSnippet = d.tocItem?.label || currentSnippet || null;
-
-    if (statusLabelEl) {
-      const chap = currentSnippet ? ` · ${currentSnippet}` : '';
-      statusLabelEl.textContent = `${formatPercent(currentPercent)}${chap}`;
-    }
 
     if (!suppressSave && currentLocator) {
       debouncer.trigger(currentLocator, currentPercent, currentSnippet);
@@ -191,30 +229,86 @@ export async function mountEpubReader({
       suppressSave = false;
       await view.prev();
     },
-    changeFontSize(deltaStep) {
-      const stepPx = deltaStep > 0 ? 2 : -2;
-      basePx = Math.max(12, Math.min(36, basePx + stepPx));
-      view.renderer?.setStyles?.(buildEpubStyles(basePx, currentTheme));
-      api.saveSettings({ defaultFontSize: basePx }).catch(() => {});
-      return basePx;
+    getDirection: bookDirection,
+    /** Tema do app (Ajustes) mudou: só afeta o EPUB quando o tema do livro é "auto". */
+    setAppTheme(next) {
+      appTheme = next || 'auto';
+      if (prefs.theme === 'auto') applyLayoutAndStyles();
     },
-    setTheme(theme) {
-      currentTheme = theme;
-      view.renderer?.setStyles?.(buildEpubStyles(basePx, currentTheme));
+    getPrefs: () => ({ ...prefs }),
+    /**
+     * Aplica novas preferências (pré-visualização ao vivo) mantendo o mesmo ponto de leitura:
+     * o último CFI do usuário é restaurado com `view.goTo(cfi)` após o reflow e nada é salvo.
+     */
+    async applyPrefs(next) {
+      if (applying) {
+        pendingPrefs = next;
+        return;
+      }
+      applying = true;
+      try {
+        let todo = next;
+        while (todo) {
+          pendingPrefs = null;
+          prefs = sanitizeReaderPrefs(todo);
+          restyling = true;
+          if (restyleTimer) clearTimeout(restyleTimer);
+          const anchor = currentLocator;
+          applyLayoutAndStyles();
+          if (isEpubCfi(anchor)) {
+            try {
+              await view.goTo(anchor);
+            } catch (_) {}
+          }
+          restyleTimer = setTimeout(() => {
+            restyling = false;
+          }, 450);
+          todo = pendingPrefs;
+        }
+      } finally {
+        applying = false;
+      }
+    },
+    /** Seek explícito pela barra de progresso (a posição salva continua sendo o CFI do relocate). */
+    async seekFraction(fraction) {
+      const f = Math.max(0, Math.min(1, Number(fraction) || 0));
+      suppressSave = false;
+      restyling = false;
+      await view.goToFraction(f);
+    },
+    /** Apoio ao E2E: documento do livro e se o ponto do CFI está na página visível. */
+    getContentDoc() {
+      return renderer?.getContents?.()[0]?.doc || null;
+    },
+    anchorIsVisible(cfi) {
+      try {
+        const resolved = view.resolveCFI(cfi);
+        const doc = renderer.getContents()[0].doc;
+        const point = resolved.anchor(doc);
+        const vis = view.lastLocation?.range;
+        if (!vis || !point) return false;
+        const p = point.startContainer ? point : (() => {
+          const r = doc.createRange();
+          r.selectNode(point);
+          return r;
+        })();
+        return (
+          vis.compareBoundaryPoints(Range.START_TO_START, p) <= 0 &&
+          vis.compareBoundaryPoints(Range.END_TO_END, p) >= 0
+        );
+      } catch (_) {
+        return false;
+      }
     },
     async goToRemotePosition(remotePos) {
       if (!remotePos || !isEpubCfi(remotePos.locator)) return;
       suppressSave = true;
+      restyling = false;
       debouncer.cancel();
       try {
         await view.goTo(remotePos.locator);
         currentLocator = remotePos.locator;
         currentPercent = Number(remotePos.percent) || currentPercent;
-        if (statusLabelEl) {
-          statusLabelEl.textContent = `${formatPercent(currentPercent)}${
-            remotePos.snippet ? ` · ${remotePos.snippet}` : ''
-          }`;
-        }
       } finally {
         setTimeout(() => {
           suppressSave = false;
@@ -233,6 +327,8 @@ export async function mountEpubReader({
     },
     async destroy() {
       destroyed = true;
+      tapper.cancel();
+      if (restyleTimer) clearTimeout(restyleTimer);
       await debouncer.flush();
       try {
         view.close?.();

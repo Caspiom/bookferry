@@ -3,20 +3,34 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  BUILTIN_PRESETS,
+  DEFAULT_READER_PREFS,
+  applyPresetToPrefs,
+  buildEpubCss,
   buildFolderView,
   computePagePercent,
   createDebouncer,
   deriveCoverStyle,
+  epubLayoutAttrs,
   filterAndSortLibrary,
   folderBreadcrumbs,
   formatBytes,
+  formatFractionPercent,
   formatPageLocator,
   formatPercent,
+  formatProgressLine,
   isEpubCfi,
   naturalCompare,
+  nextPagedFormat,
   normalizeFolderPath,
   parsePageLocator,
+  resolveEffectiveTheme,
   resolveExistingFolder,
+  resolveKeyAction,
+  resolveTapZone,
+  sanitizeProgressPrefs,
+  sanitizeReaderPrefs,
+  validatePresetName,
 } from '../src/js/state.js';
 
 describe('Ordenação natural de páginas (naturalCompare)', () => {
@@ -217,5 +231,249 @@ describe('Navegação por pastas', () => {
     assert.equal(resolveExistingFolder(books, 'dnd/apagada/x'), 'dnd');
     assert.equal(resolveExistingFolder(books, 'nada/mais'), '');
     assert.equal(resolveExistingFolder(books, 'dnd'), 'dnd');
+  });
+});
+
+describe('Preferências de leitura (sanitizeReaderPrefs)', () => {
+  it('entrada vazia, nula ou lixo cai nos padrões', () => {
+    assert.deepEqual(sanitizeReaderPrefs(undefined), DEFAULT_READER_PREFS);
+    assert.deepEqual(sanitizeReaderPrefs(null), DEFAULT_READER_PREFS);
+    assert.deepEqual(sanitizeReaderPrefs('x'), DEFAULT_READER_PREFS);
+    assert.deepEqual(sanitizeReaderPrefs([1, 2]), DEFAULT_READER_PREFS);
+  });
+
+  it('limita números às faixas e ignora tipos errados', () => {
+    const lo = sanitizeReaderPrefs({ font_size: 1, line_height: 0.1, margin_pct: -5 });
+    assert.equal(lo.font_size, 12);
+    assert.equal(lo.line_height, 1.2);
+    assert.equal(lo.margin_pct, 0);
+    const hi = sanitizeReaderPrefs({ font_size: 999, line_height: 9, margin_pct: 99 });
+    assert.equal(hi.font_size, 36);
+    assert.equal(hi.line_height, 2.2);
+    assert.equal(hi.margin_pct, 20);
+    const bad = sanitizeReaderPrefs({ font_size: '30', line_height: NaN, margin_pct: Infinity });
+    assert.equal(bad.font_size, DEFAULT_READER_PREFS.font_size);
+    assert.equal(bad.line_height, DEFAULT_READER_PREFS.line_height);
+    assert.equal(bad.margin_pct, DEFAULT_READER_PREFS.margin_pct);
+  });
+
+  it('enums inválidos voltam ao padrão e CSS cru nunca passa', () => {
+    const p = sanitizeReaderPrefs({
+      font_family: 'Comic; } body { display:none',
+      theme: 'red',
+      align: 'center',
+    });
+    assert.equal(p.font_family, 'book');
+    assert.equal(p.theme, 'auto');
+    assert.equal(p.align, 'justify');
+  });
+
+  it('é idempotente', () => {
+    const once = sanitizeReaderPrefs({ font_size: 22.4, line_height: 1.83, theme: 'black' });
+    assert.deepEqual(sanitizeReaderPrefs(once), once);
+    assert.equal(once.font_size, 22);
+    assert.equal(once.line_height, 1.85);
+  });
+});
+
+describe('CSS do EPUB e layout', () => {
+  it('buildEpubCss usa só valores validados e as cores do tema', () => {
+    const css = buildEpubCss(
+      { font_size: 24, line_height: 1.9, font_family: 'serif', align: 'left', hyphenate: true },
+      'black',
+    );
+    assert.match(css, /font-size: 24px !important/);
+    assert.match(css, /line-height: 1\.9 !important/);
+    assert.match(css, /background: #000000 !important/);
+    assert.match(css, /color-scheme: dark/);
+    assert.match(css, /text-align: left !important/);
+    assert.match(css, /hyphens: auto !important/);
+    assert.match(css, /Georgia/);
+  });
+
+  it('família "book" não força fonte; justificado e sem hifenização por padrão', () => {
+    const css = buildEpubCss({}, 'light');
+    assert.doesNotMatch(css, /font-family/);
+    assert.match(css, /text-align: justify !important/);
+    assert.match(css, /hyphens: manual !important/);
+    assert.match(css, /color-scheme: light/);
+  });
+
+  it('entrada maliciosa não vaza para o CSS', () => {
+    const css = buildEpubCss(
+      { font_family: 'x; } * { display:none', font_size: '1px; } *{', theme: 'url(x)' },
+      'nope',
+    );
+    assert.doesNotMatch(css, /display:\s*none/);
+    assert.match(css, /font-size: 18px/);
+  });
+
+  it('a margem lateral vira o atributo gap em %', () => {
+    assert.deepEqual(epubLayoutAttrs({ margin_pct: 12 }), { gap: '12%' });
+    assert.deepEqual(epubLayoutAttrs({ margin_pct: 500 }), { gap: '20%' });
+  });
+});
+
+describe('Tema efetivo', () => {
+  it('tema do livro vence; auto segue o app; senão o sistema', () => {
+    assert.equal(resolveEffectiveTheme('black', 'light', false), 'black');
+    assert.equal(resolveEffectiveTheme('auto', 'sepia', true), 'sepia');
+    assert.equal(resolveEffectiveTheme('auto', 'auto', true), 'dark');
+    assert.equal(resolveEffectiveTheme('auto', 'auto', false), 'light');
+    assert.equal(resolveEffectiveTheme('xyz', 'abc', false), 'light');
+  });
+});
+
+describe('Presets', () => {
+  it('validatePresetName: limites e caracteres proibidos', () => {
+    assert.deepEqual(validatePresetName('  Noite  '), { ok: true, name: 'Noite' });
+    assert.equal(validatePresetName('').ok, false);
+    assert.equal(validatePresetName('   ').ok, false);
+    assert.equal(validatePresetName(null).ok, false);
+    assert.equal(validatePresetName('a'.repeat(24)).ok, true);
+    assert.equal(validatePresetName('a'.repeat(25)).ok, false);
+    assert.equal(validatePresetName('ação'.repeat(6)).ok, true);
+    assert.equal(validatePresetName('<b>').ok, false);
+    assert.equal(validatePresetName('a\nb').ok, false);
+  });
+
+  it('applyPresetToPrefs copia só o estilo do EPUB e preserva os campos de quadrinhos', () => {
+    const base = sanitizeReaderPrefs({ direction: 'rtl', spread_mode: 'double', font_size: 30 });
+    const out = applyPresetToPrefs(base, BUILTIN_PRESETS[2].prefs);
+    assert.equal(out.theme, 'black');
+    assert.equal(out.font_size, 20);
+    assert.equal(out.direction, 'rtl');
+    assert.equal(out.spread_mode, 'double');
+  });
+
+  it('presets embutidos já estão dentro das faixas', () => {
+    for (const p of BUILTIN_PRESETS) assert.deepEqual(sanitizeReaderPrefs(p.prefs), p.prefs);
+  });
+});
+
+describe('Itens do rodapé e formato de páginas', () => {
+  it('sanitizeProgressPrefs aplica padrões e limita page_format', () => {
+    assert.deepEqual(sanitizeProgressPrefs(null), {
+      chapter: true,
+      book_percent: true,
+      chapter_percent: true,
+      pages_left: true,
+      page_format: 0,
+    });
+    assert.equal(sanitizeProgressPrefs({ page_format: 99 }).page_format, 2);
+    assert.equal(sanitizeProgressPrefs({ chapter: 'sim' }).chapter, true);
+    assert.equal(sanitizeProgressPrefs({ chapter: false }).chapter, false);
+  });
+
+  it('nextPagedFormat cicla 0 -> 1 -> 2 -> 0', () => {
+    assert.equal(nextPagedFormat(0), 1);
+    assert.equal(nextPagedFormat(1), 2);
+    assert.equal(nextPagedFormat(2), 0);
+    assert.equal(nextPagedFormat(undefined), 1);
+  });
+
+  it('formatFractionPercent: bordas', () => {
+    assert.equal(formatFractionPercent(0), '0%');
+    assert.equal(formatFractionPercent(-1), '0%');
+    assert.equal(formatFractionPercent(0.4), '40%');
+    assert.equal(formatFractionPercent(0.996), '100%');
+    assert.equal(formatFractionPercent(1), '100%');
+    assert.equal(formatFractionPercent(null), '');
+    assert.equal(formatFractionPercent(NaN), '');
+  });
+
+  it('EPUB: linha completa e itens desligados', () => {
+    const info = {
+      kind: 'epub',
+      chapterTitle: 'Capítulo 2',
+      bookFraction: 0.5,
+      chapterFraction: 0.25,
+      pagesLeftInChapter: 3,
+      totalChapters: 10,
+    };
+    assert.equal(
+      formatProgressLine(info),
+      'Capítulo 2 · 50% · cap. 25% · faltam 3 págs. no capítulo',
+    );
+    assert.equal(formatProgressLine(info, { chapter: false, pages_left: false }), '50% · cap. 25%');
+    assert.equal(
+      formatProgressLine(info, {
+        chapter: false,
+        book_percent: false,
+        chapter_percent: false,
+        pages_left: false,
+      }),
+      '50%',
+    );
+  });
+
+  it('EPUB: bordas (0%, 100%, 1 capítulo, sem título, desconhecidos)', () => {
+    assert.equal(
+      formatProgressLine({ kind: 'epub', bookFraction: 0, chapterTitle: '' }),
+      '0%',
+    );
+    assert.equal(
+      formatProgressLine({ kind: 'epub', bookFraction: 1, pagesLeftInChapter: 0, chapterFraction: 1, totalChapters: 4 }),
+      '100% · cap. 100% · última página no capítulo',
+    );
+    // Livro de 1 capítulo: "cap. X%" repetiria o % do livro.
+    assert.equal(
+      formatProgressLine({ kind: 'epub', chapterTitle: 'Único', bookFraction: 0.3, chapterFraction: 0.3, totalChapters: 1 }),
+      'Único · 30%',
+    );
+    assert.equal(
+      formatProgressLine({ kind: 'epub', bookFraction: 0.1, pagesLeftInChapter: 1 }),
+      '10% · falta 1 pág. no capítulo',
+    );
+    // Itens que o leitor não sabe calcular são omitidos, não inventados.
+    assert.equal(
+      formatProgressLine({ kind: 'epub', bookFraction: null, chapterFraction: null, pagesLeftInChapter: null }),
+      '',
+    );
+    assert.equal(formatProgressLine(null), '');
+  });
+
+  it('PDF/CBZ: três formatos e total desconhecido', () => {
+    const info = { kind: 'paged', page: 3, totalPages: 10 };
+    assert.equal(formatProgressLine(info, undefined, 0), 'Pág. 3 / 10');
+    assert.equal(formatProgressLine(info, undefined, 1), '30%');
+    assert.equal(formatProgressLine(info, undefined, 2), 'faltam 7 págs.');
+    assert.equal(formatProgressLine({ kind: 'paged', page: 10, totalPages: 10 }, undefined, 2), 'última página');
+    assert.equal(formatProgressLine({ kind: 'paged', page: 9, totalPages: 10 }, undefined, 2), 'falta 1 pág.');
+    assert.equal(formatProgressLine({ kind: 'paged', page: 4 }, undefined, 1), 'Pág. 4');
+    assert.equal(formatProgressLine({ kind: 'paged', page: 2, pageEnd: 3, totalPages: 8 }, undefined, 0), 'Págs. 2–3 / 8');
+  });
+});
+
+describe('Zonas de toque e teclado', () => {
+  it('resolveTapZone: 30% / 40% / 30% e inversão em RTL', () => {
+    assert.equal(resolveTapZone(10, 1000), 'prev');
+    assert.equal(resolveTapZone(299, 1000), 'prev');
+    assert.equal(resolveTapZone(300, 1000), 'toggle');
+    assert.equal(resolveTapZone(500, 1000), 'toggle');
+    assert.equal(resolveTapZone(701, 1000), 'next');
+    assert.equal(resolveTapZone(10, 1000, 'rtl'), 'next');
+    assert.equal(resolveTapZone(990, 1000, 'rtl'), 'prev');
+    assert.equal(resolveTapZone(500, 1000, 'rtl'), 'toggle');
+  });
+
+  it('resolveTapZone: entradas inválidas alternam a interface em vez de virar página', () => {
+    assert.equal(resolveTapZone(10, 0), 'toggle');
+    assert.equal(resolveTapZone(NaN, 100), 'toggle');
+  });
+
+  it('resolveKeyAction: setas, espaço, F, F11, Esc e RTL', () => {
+    assert.equal(resolveKeyAction({ key: 'ArrowRight' }), 'next');
+    assert.equal(resolveKeyAction({ key: 'ArrowRight' }, 'rtl'), 'prev');
+    assert.equal(resolveKeyAction({ key: 'ArrowLeft' }, 'rtl'), 'next');
+    assert.equal(resolveKeyAction({ key: ' ' }), 'next');
+    assert.equal(resolveKeyAction({ key: ' ', shiftKey: true }), 'prev');
+    assert.equal(resolveKeyAction({ key: 'PageDown' }, 'rtl'), 'next');
+    assert.equal(resolveKeyAction({ key: 'f' }), 'toggle-immersive');
+    assert.equal(resolveKeyAction({ key: 'F11' }), 'toggle-fullscreen');
+    assert.equal(resolveKeyAction({ key: 'Escape' }), 'escape');
+    assert.equal(resolveKeyAction({ key: '=', ctrlKey: true }), 'font-inc');
+    assert.equal(resolveKeyAction({ key: 'a' }), null);
+    assert.equal(resolveKeyAction({ key: 'ArrowRight', altKey: true }), null);
   });
 });

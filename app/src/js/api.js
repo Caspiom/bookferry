@@ -88,6 +88,19 @@ export const api = {
   rotatePairingQr: () => invokeCommand('rotate_pairing_qr'),
   listPairedDevices: () => invokeCommand('list_paired_devices'),
   revokePairedDevice: (deviceId) => invokeCommand('revoke_paired_device', { deviceId }),
+  // Preferências de leitura (por livro, padrão global, presets e linha de progresso)
+  getReaderPrefs: (bookId) => invokeCommand('get_reader_prefs', { bookId }),
+  saveReaderPrefs: (bookId, prefs) => invokeCommand('save_reader_prefs', { bookId, prefs }),
+  resetReaderPrefs: (bookId) => invokeCommand('reset_reader_prefs', { bookId }),
+  setDefaultReaderPrefs: (bookId, prefs) =>
+    invokeCommand('set_default_reader_prefs', { bookId, prefs }),
+  saveReaderPreset: (bookId, name, prefs) =>
+    invokeCommand('save_reader_preset', { bookId, name, prefs }),
+  deleteReaderPreset: (bookId, name) => invokeCommand('delete_reader_preset', { bookId, name }),
+  saveProgressPrefs: (bookId, progress) =>
+    invokeCommand('save_progress_prefs', { bookId, progress }),
+  setFullscreen: (fullscreen) => invokeCommand('set_fullscreen', { fullscreen }),
+  isFullscreen: () => invokeCommand('is_fullscreen'),
   // Comandos E2E (disponíveis apenas quando compilado com BOOKFERRY_E2E=1)
   e2ePairSecondClient: (deviceName) => invokeCommand('e2e_pair_second_client', { deviceName }),
   e2eWaitPeerPosition: (bookId, minPercent, timeoutMs, expectedLocatorPrefix = null) =>

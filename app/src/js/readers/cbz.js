@@ -16,6 +16,7 @@ export async function mountCbzReader({
   viewportEl,
   statusLabelEl,
   onSavePosition,
+  hooks = {},
 }) {
   viewportEl.innerHTML = '<div class="reader-loading">Indexando páginas do CBZ...</div>';
 
@@ -58,6 +59,15 @@ export async function mountCbzReader({
   const preloadImg = new Image();
 
   function updateStatusLabel() {
+    if (hooks.onProgress) {
+      hooks.onProgress({
+        kind: 'paged',
+        page: currentPage,
+        totalPages,
+        zoomPct: Math.round(zoomScale * 100),
+      });
+      return;
+    }
     if (!statusLabelEl) return;
     const pct = computePagePercent(currentPage, totalPages);
     const zoomPct = Math.round(zoomScale * 100);
@@ -212,6 +222,11 @@ export async function mountCbzReader({
       if (currentPage > 1) {
         loadPage(currentPage - 1, true);
       }
+    },
+    /** Seek explícito (barra de progresso); `page` é 1-based. */
+    async seekPage(page) {
+      const target = Math.max(1, Math.min(totalPages, Math.round(Number(page)) || 1));
+      if (target !== currentPage) loadPage(target, true);
     },
     zoomIn() {
       setZoom(zoomScale + 0.25);

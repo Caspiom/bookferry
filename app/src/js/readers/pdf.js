@@ -22,6 +22,7 @@ export async function mountPdfReader({
   viewportEl,
   statusLabelEl,
   onSavePosition,
+  hooks = {},
 }) {
   viewportEl.innerHTML = '<div class="reader-loading">Carregando PDF...</div>';
 
@@ -76,6 +77,15 @@ export async function mountPdfReader({
   viewportEl.appendChild(stageEl);
 
   function updateStatusLabel() {
+    if (hooks.onProgress) {
+      hooks.onProgress({
+        kind: 'paged',
+        page: currentPage,
+        totalPages,
+        zoomPct: Math.round(zoomScale * 100),
+      });
+      return;
+    }
     if (!statusLabelEl) return;
     const pct = computePagePercent(currentPage, totalPages);
     const zoomPct = Math.round(zoomScale * 100);
@@ -230,6 +240,11 @@ export async function mountPdfReader({
       if (currentPage > 1) {
         await goToPage(currentPage - 1, true);
       }
+    },
+    /** Seek explícito (barra de progresso); `page` é 1-based. */
+    async seekPage(page) {
+      const target = Math.max(1, Math.min(totalPages, Math.round(Number(page)) || 1));
+      if (target !== currentPage) await goToPage(target, true);
     },
     zoomIn() {
       setZoom(zoomScale + 0.25);

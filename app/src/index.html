@@ -208,23 +208,18 @@
         </div>
 
         <div class="reader-toolbar-right">
-          <!-- Controles exclusivos de EPUB (tamanho de fonte) -->
+          <!-- Controles exclusivos de EPUB: painel de aparência "Aa" -->
           <div id="reader-epub-controls" class="control-group hidden">
             <button
-              id="btn-font-dec"
+              id="btn-reader-aa"
               type="button"
-              class="btn btn-secondary"
-              aria-label="Diminuir tamanho da fonte"
+              class="btn btn-secondary btn-aa"
+              aria-label="Aparência do texto"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+              aria-controls="aa-panel"
             >
-              A−
-            </button>
-            <button
-              id="btn-font-inc"
-              type="button"
-              class="btn btn-secondary"
-              aria-label="Aumentar tamanho da fonte"
-            >
-              A+
+              <span aria-hidden="true">Aa</span>
             </button>
           </div>
 
@@ -278,6 +273,104 @@
         </div>
       </header>
 
+      <!-- Painel de aparência do EPUB (pré-visualização ao vivo, preferências por livro) -->
+      <section id="aa-panel" class="aa-panel hidden" role="dialog" aria-label="Aparência do texto">
+        <div class="aa-section">
+          <div class="aa-label">Predefinições</div>
+          <div id="aa-presets" class="aa-presets"></div>
+          <div class="aa-save-row">
+            <button id="aa-preset-save-open" type="button" class="btn btn-ghost btn-sm">
+              Salvar como predefinição…
+            </button>
+            <form id="aa-preset-form" class="aa-preset-form hidden" autocomplete="off">
+              <input
+                id="aa-preset-name"
+                type="text"
+                maxlength="24"
+                placeholder="Nome (até 24 letras)"
+                aria-label="Nome da predefinição"
+              />
+              <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
+            </form>
+          </div>
+          <div id="aa-preset-error" class="aa-error hidden" role="alert"></div>
+        </div>
+
+        <div class="aa-section aa-grid">
+          <label class="aa-label" for="aa-font-size">Tamanho</label>
+          <div class="aa-control">
+            <input id="aa-font-size" type="range" min="12" max="36" step="1" />
+            <output id="aa-font-size-out" for="aa-font-size"></output>
+          </div>
+
+          <label class="aa-label" for="aa-font-family">Fonte</label>
+          <div class="aa-control">
+            <select id="aa-font-family">
+              <option value="book">Original do livro</option>
+              <option value="serif">Serifada</option>
+              <option value="sans">Sem serifa</option>
+              <option value="mono">Monoespaçada</option>
+            </select>
+          </div>
+
+          <label class="aa-label" for="aa-line-height">Entrelinhas</label>
+          <div class="aa-control">
+            <input id="aa-line-height" type="range" min="1.2" max="2.2" step="0.05" />
+            <output id="aa-line-height-out" for="aa-line-height"></output>
+          </div>
+
+          <label class="aa-label" for="aa-margin">Margens</label>
+          <div class="aa-control">
+            <input id="aa-margin" type="range" min="0" max="20" step="1" />
+            <output id="aa-margin-out" for="aa-margin"></output>
+          </div>
+
+          <label class="aa-label" for="aa-align">Alinhamento</label>
+          <div class="aa-control">
+            <select id="aa-align">
+              <option value="justify">Justificado</option>
+              <option value="left">À esquerda</option>
+            </select>
+          </div>
+
+          <span class="aa-label">Hifenização</span>
+          <div class="aa-control">
+            <label class="aa-check"><input id="aa-hyphenate" type="checkbox" /> Ligada</label>
+          </div>
+        </div>
+
+        <div class="aa-section">
+          <div class="aa-label" id="aa-theme-label">Tema</div>
+          <div class="aa-themes" role="radiogroup" aria-labelledby="aa-theme-label">
+            <button type="button" role="radio" class="aa-theme" data-theme="auto">Auto</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="light">Claro</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="sepia">Sépia</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="dark">Escuro</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="black">Preto</button>
+          </div>
+        </div>
+
+        <div class="aa-section">
+          <div class="aa-label">Mostrar no rodapé</div>
+          <div class="aa-checks">
+            <label class="aa-check"><input data-progress="chapter" type="checkbox" /> Capítulo</label>
+            <label class="aa-check"><input data-progress="book_percent" type="checkbox" /> % do livro</label>
+            <label class="aa-check"><input data-progress="chapter_percent" type="checkbox" /> % do capítulo</label>
+            <label class="aa-check"><input data-progress="pages_left" type="checkbox" /> Páginas restantes</label>
+          </div>
+        </div>
+
+        <div class="aa-section aa-actions">
+          <button id="aa-set-default" type="button" class="btn btn-secondary btn-sm">
+            Usar como padrão para novos livros
+          </button>
+          <button id="aa-reset" type="button" class="btn btn-ghost btn-sm">
+            Restaurar padrão do livro
+          </button>
+          <div id="aa-status" class="aa-status" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
       <div class="reader-body">
         <!-- Gaveta lateral de Sumário (TOC) para EPUB -->
         <aside id="toc-drawer" class="toc-drawer hidden" aria-label="Sumário do livro">
@@ -299,10 +392,28 @@
         <div id="reader-viewport" class="reader-viewport"></div>
       </div>
 
-      <footer class="reader-footer">
-        <span id="reader-status-label" class="reader-status-label" role="status" aria-live="polite">
+      <footer class="reader-footer" id="reader-footer">
+        <div
+          id="reader-progress"
+          class="reader-progress"
+          role="slider"
+          tabindex="0"
+          aria-label="Progresso de leitura"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+        >
+          <div id="reader-progress-fill" class="reader-progress-fill"></div>
+        </div>
+        <button
+          id="reader-status-label"
+          type="button"
+          class="reader-status-label"
+          aria-live="polite"
+          title="Clique para alternar o formato"
+        >
           0%
-        </span>
+        </button>
       </footer>
     </main>
 
