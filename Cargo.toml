@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/bookferry-core",
     "crates/bookferry-server",
+    "crates/bookferry-client",
 ]
 
 [workspace.package]

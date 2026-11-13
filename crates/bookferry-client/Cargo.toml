@@ -1,0 +1,33 @@
+[package]
+name = "bookferry-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Biblioteca cliente de sincronizacao offline-first do Bookferry (Tauri Desktop e Android)"
+
+[lib]
+name = "bookferry_client"
+path = "src/lib.rs"
+
+[dependencies]
+bookferry-core.workspace = true
+getrandom.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+mdns-sd.workspace = true
+rusqlite.workspace = true
+rustls.workspace = true
+rustls-pki-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+bookferry-server = { path = "../bookferry-server" }
+proptest.workspace = true
+tempfile.workspace = true
+tracing-subscriber.workspace = true
