@@ -470,3 +470,15 @@ Refeita depois do agente:
   - Os títulos nos cards da biblioteca são cortados sem reticências (`Cronicas_de_Bookferr`).
 - **Segurança:** o harness E2E só existe quando o build tem `BOOKFERRY_E2E=1` (`cfg(bookferry_e2e)`); no build normal os overrides de diretório e vault não compilam. `#![forbid(unsafe_code)]`; os `unwrap` restantes estão nos testes. 518 pacotes, só licenças permissivas (com a ressalva já conhecida de `r-efi`).
 - **Pendente para a B2:** conferir o EPUB no desktop real e no celular, o que for específico de Android (Chromium WebView, não webkit2gtk), e a câmera de QR.
+
+
+## Adendo: navegação por subpastas (13/11/2026)
+
+Pedido do Lucas: o vault `~/Documents/midia` tem subpastas; elas devem aparecer como pastas no app, e pastas sem PDF/EPUB/CBZ não devem aparecer.
+
+- **Servidor** (`bookferry-server`): `GET /books` ganhou o campo `folder` (pasta relativa ao vault, separada por `/`, `""` = raiz). Só a pasta sai na API: nem o nome do arquivo nem caminho absoluto (teste `books_expose_folder_and_ignore_dirs_without_supported_files`). O scan já era recursivo.
+- **Cliente** (`bookferry-client`): `ServerBookEntry.folder` (`serde(default)`, servidor antigo = raiz) e `CachedBook.folder`; banco local migrou para `user_version = 2` (`ALTER TABLE cached_books ADD COLUMN folder`; teste `v1_cache_migrates_and_roundtrips_folder`). Mudar só a pasta de um livro conta como mudança da biblioteca.
+- **App**: as pastas são **derivadas dos livros**, então uma pasta sem nenhum livro (nem em subpastas) não existe na UI. Cartões de pasta com contagem recursiva, migalhas de pão, botão "voltar" do Android sobe um nível (via `history`). Busca procura em todas as pastas; "Continuar lendo" só na raiz. Lógica pura em `state.js` (`buildFolderView`, `folderBreadcrumbs`, `resolveExistingFolder`; 7 testes novos em `node --test`).
+- **Achado do E2E:** o DTO `BookViewDto` em `commands.rs` descartava o campo novo; o E2E pegou (pastas vazias na raiz) e foi corrigido. O E2E agora gera `Manuais/`, `Quadrinhos/DC/` e as pastas sem livros `Jogos/` e `Vazia/`, e falha se a raiz não mostrar exatamente `Manuais` e `Quadrinhos` (novo screenshot `09-folder-nav.png`).
+- **Vault real:** servidor compilado contra `~/Documents/midia`: 26 livros (24 PDF, 1 CBZ, 1 EPUB), todos com `folder` correto; `jogos/` e `wallpapers/` não geram nada. Há 1 arquivo `.cbr` no vault, que **não é suportado** e fica de fora.
+- **Não verificado:** o gesto de voltar do Android (histórico) só no celular (B2).

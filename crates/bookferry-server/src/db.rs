@@ -134,8 +134,20 @@ pub struct BookWithPosition {
     pub format: BookFormat,
     pub size_bytes: u64,
     pub mtime_ms: u64,
+    /// Pasta do livro relativa ao `vault_dir`, separada por `/` (`""` = raiz). Nunca inclui o
+    /// nome do arquivo nem caminho absoluto.
+    #[serde(default)]
+    pub folder: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<PositionRecord>,
+}
+
+/// Pasta (sem o nome do arquivo) de um `rel_path` `a/b/livro.pdf` -> `a/b`; arquivo na raiz -> `""`.
+pub fn folder_of(rel_path: &str) -> String {
+    match rel_path.rsplit_once('/') {
+        Some((dir, _file)) => dir.to_string(),
+        None => String::new(),
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -382,7 +394,8 @@ impl Database {
             "SELECT
                 b.book_id, b.partial_md5, b.title, b.format, b.size_bytes, b.mtime_ms,
                 p.device_id, p.hlc_canonical, p.hlc_wall_ms, p.hlc_logical, p.hlc_node,
-                p.locator, p.snippet, p.percent, p.server_seq, p.updated_at_ms
+                p.locator, p.snippet, p.percent, p.server_seq, p.updated_at_ms,
+                b.rel_path
              FROM books b
              LEFT JOIN positions p ON b.book_id = p.book_id
              ORDER BY b.title ASC, b.book_id ASC",
@@ -417,6 +430,7 @@ impl Database {
                 format,
                 size_bytes: row.get::<_, i64>(4)?.max(0) as u64,
                 mtime_ms: row.get::<_, i64>(5)?.max(0) as u64,
+                folder: folder_of(&row.get::<_, String>(16)?),
                 position,
             })
         })?;
@@ -814,5 +828,20 @@ mod permission_tests {
             let mode = entry.metadata().expect("meta").permissions().mode() & 0o777;
             assert_eq!(mode, 0o600, "{:?} deve ser 0600", entry.file_name());
         }
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::folder_of;
+
+    #[test]
+    fn folder_of_strips_file_name() {
+        assert_eq!(folder_of("livro.pdf"), "");
+        assert_eq!(
+            folder_of("hqs/DC/Swamp Thing/vol1.cbz"),
+            "hqs/DC/Swamp Thing"
+        );
+        assert_eq!(folder_of("a/b.epub"), "a");
     }
 }

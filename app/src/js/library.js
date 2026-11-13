@@ -3,10 +3,14 @@
 
 import { api } from './api.js';
 import {
+  buildFolderView,
   deriveCoverStyle,
   filterAndSortLibrary,
+  folderBreadcrumbs,
   formatBytes,
   formatPercent,
+  normalizeFolderPath,
+  resolveExistingFolder,
 } from './state.js';
 import {
   askResumeModal,
@@ -119,33 +123,140 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload) {
   return card;
 }
 
+// Pasta atualmente aberta na biblioteca (`""` = raiz) e ultimos argumentos de renderizacao,
+// para re-renderizar ao navegar sem mexer nos chamadores.
+let currentFolder = '';
+let lastRender = null;
+
+const FOLDER_ICON_SVG =
+  '<svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true" focusable="false">' +
+  '<path fill="currentColor" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.3c.6 0 1.2.3 1.6.8L12.8 6.5H18.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
+
+function createFolderCardElement(folder, onEnter) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'folder-card';
+  btn.dataset.folderPath = folder.path;
+  btn.setAttribute(
+    'aria-label',
+    `Abrir pasta ${folder.name} (${folder.count} ${folder.count === 1 ? 'livro' : 'livros'})`,
+  );
+  const icon = document.createElement('span');
+  icon.className = 'folder-card-icon';
+  icon.innerHTML = FOLDER_ICON_SVG; // constante estatica, sem dados do servidor
+  const name = document.createElement('span');
+  name.className = 'folder-card-name';
+  name.textContent = folder.name;
+  name.title = folder.name;
+  const count = document.createElement('span');
+  count.className = 'folder-card-count';
+  count.textContent = folder.count === 1 ? '1 livro' : `${folder.count} livros`;
+  btn.append(icon, name, count);
+  btn.addEventListener('click', () => onEnter(folder.path));
+  return btn;
+}
+
+function renderBreadcrumb(path) {
+  const nav = document.getElementById('folder-breadcrumb');
+  if (!nav) return;
+  nav.innerHTML = '';
+  if (path === '') {
+    nav.classList.add('hidden');
+    return;
+  }
+  nav.classList.remove('hidden');
+  const crumbs = [{ name: 'Biblioteca', path: '' }, ...folderBreadcrumbs(path)];
+  crumbs.forEach((c, i) => {
+    const last = i === crumbs.length - 1;
+    const el = document.createElement(last ? 'span' : 'button');
+    el.className = last ? 'crumb crumb-current' : 'crumb';
+    el.textContent = c.name;
+    if (last) {
+      el.setAttribute('aria-current', 'page');
+    } else {
+      el.type = 'button';
+      el.addEventListener('click', () => navigateToFolder(c.path));
+    }
+    nav.appendChild(el);
+    if (!last) {
+      const sep = document.createElement('span');
+      sep.className = 'crumb-sep';
+      sep.setAttribute('aria-hidden', 'true');
+      sep.textContent = '/';
+      nav.appendChild(sep);
+    }
+  });
+}
+
 /**
- * Renderiza a seção "Continuar lendo" e a grade completa da biblioteca.
+ * Abre uma pasta da biblioteca. Empilha no historico do webview para o botao "voltar"
+ * (Android) subir um nivel em vez de fechar o app.
+ * @param {string} path
+ * @param {{ push?: boolean }} [opts]
+ */
+export function navigateToFolder(path, { push = true } = {}) {
+  const target = normalizeFolderPath(path);
+  if (target === currentFolder) return;
+  currentFolder = target;
+  if (push && typeof history !== 'undefined') {
+    history.pushState({ bookferryFolder: target }, '');
+  }
+  if (lastRender) {
+    const { books, searchQuery, onOpenBook, onRemoveDownload } = lastRender;
+    renderLibraryView(books, searchQuery, onOpenBook, onRemoveDownload);
+    document.getElementById('library-scroll-area')?.scrollTo?.({ top: 0 });
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('popstate', (ev) => {
+    navigateToFolder(ev.state?.bookferryFolder ?? '', { push: false });
+  });
+}
+
+/**
+ * Renderiza a biblioteca: navegação por pastas, seção "Continuar lendo" (só na raiz) e grade.
+ * Com busca ativa, procura em TODAS as pastas (lista plana).
  * @param {Array<object>} books
  * @param {string} searchQuery
  * @param {(book: object) => void} onOpenBook
  * @param {(book: object) => void} onRemoveDownload
  */
 export function renderLibraryView(books, searchQuery, onOpenBook, onRemoveDownload) {
+  lastRender = { books, searchQuery, onOpenBook, onRemoveDownload };
   const continueSection = document.getElementById('continue-reading-section');
   const continueGrid = document.getElementById('continue-reading-grid');
   const mainGrid = document.getElementById('library-grid');
+  const folderGrid = document.getElementById('folder-grid');
+  const foldersSection = document.getElementById('folders-section');
+  const booksTitle = document.getElementById('books-section-title');
   const emptyState = document.getElementById('library-empty-state');
   const countLabel = document.getElementById('library-count-label');
 
   if (!mainGrid) return;
 
+  const searching = String(searchQuery || '').trim() !== '';
+  currentFolder = resolveExistingFolder(books, currentFolder);
   const { continueReading, filteredBooks } = filterAndSortLibrary(books, searchQuery);
+  const view = searching
+    ? { folders: [], books: filteredBooks }
+    : buildFolderView(books, currentFolder);
 
   if (countLabel) {
-    countLabel.textContent =
-      filteredBooks.length === 1 ? '1 livro' : `${filteredBooks.length} livros`;
+    const nb = view.books.length;
+    const nf = view.folders.length;
+    const parts = [];
+    if (nf > 0) parts.push(nf === 1 ? '1 pasta' : `${nf} pastas`);
+    if (nb > 0 || nf === 0) parts.push(nb === 1 ? '1 livro' : `${nb} livros`);
+    countLabel.textContent = parts.join(' · ');
   }
 
-  // Seção "Continuar lendo"
+  renderBreadcrumb(searching ? '' : currentFolder);
+
+  // Seção "Continuar lendo": só na raiz (ou nos resultados de busca)
   if (continueSection && continueGrid) {
     continueGrid.innerHTML = '';
-    if (continueReading.length > 0) {
+    if ((searching || currentFolder === '') && continueReading.length > 0) {
       continueSection.classList.remove('hidden');
       for (const b of continueReading.slice(0, 4)) {
         continueGrid.appendChild(createBookCardElement(b, onOpenBook, onRemoveDownload));
@@ -155,13 +266,31 @@ export function renderLibraryView(books, searchQuery, onOpenBook, onRemoveDownlo
     }
   }
 
-  // Grade principal
+  // Pastas (só as que têm algum livro dentro, por construção)
+  if (folderGrid && foldersSection) {
+    folderGrid.innerHTML = '';
+    if (view.folders.length > 0) {
+      foldersSection.classList.remove('hidden');
+      for (const f of view.folders) {
+        folderGrid.appendChild(createFolderCardElement(f, (p) => navigateToFolder(p)));
+      }
+    } else {
+      foldersSection.classList.add('hidden');
+    }
+  }
+
+  // Livros da pasta atual
   mainGrid.innerHTML = '';
-  if (filteredBooks.length === 0) {
+  const hasContent = view.folders.length > 0 || view.books.length > 0;
+  if (booksTitle) {
+    booksTitle.parentElement?.classList.toggle('hidden', view.books.length === 0);
+    booksTitle.textContent = searching ? 'Resultados' : 'Livros';
+  }
+  if (!hasContent) {
     if (emptyState) emptyState.classList.remove('hidden');
   } else {
     if (emptyState) emptyState.classList.add('hidden');
-    for (const b of filteredBooks) {
+    for (const b of view.books) {
       mainGrid.appendChild(createBookCardElement(b, onOpenBook, onRemoveDownload));
     }
   }

@@ -370,9 +370,16 @@ const outDir = process.argv[2]
 fs.mkdirSync(outDir, { recursive: true });
 
 const epubPath = path.join(outDir, 'Cronicas_de_Bookferry.epub');
-const pdfPath = path.join(outDir, 'Manual_Bookferry_5p.pdf');
-const cbzPath = path.join(outDir, 'Quadrinho_Sintetico_6p.cbz');
+const pdfPath = path.join(outDir, 'Manuais', 'Manual_Bookferry_5p.pdf');
+const cbzPath = path.join(outDir, 'Quadrinhos', 'DC', 'Quadrinho_Sintetico_6p.cbz');
 
+fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
+fs.mkdirSync(path.dirname(cbzPath), { recursive: true });
+// Pastas SEM epub/pdf/cbz: nao podem aparecer na biblioteca
+fs.mkdirSync(path.join(outDir, 'Jogos', 'Saves'), { recursive: true });
+fs.writeFileSync(path.join(outDir, 'Jogos', 'Saves', 'dados.bin'), Buffer.from([1, 2, 3]));
+fs.mkdirSync(path.join(outDir, 'Vazia'), { recursive: true });
+fs.writeFileSync(path.join(outDir, 'Vazia', 'notas.txt'), 'sem livros');
 fs.writeFileSync(epubPath, generateSyntheticEpub());
 fs.writeFileSync(pdfPath, generateSyntheticPdf5Pages());
 fs.writeFileSync(cbzPath, generateSyntheticCbz6Pages());

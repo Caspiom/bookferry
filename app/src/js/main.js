@@ -578,6 +578,31 @@ async function runE2eAutomation() {
     // Screenshot 1: Biblioteca inicial com os 3 formatos
     results.screenshots.push(await api.e2eCaptureScreenshot('01-library'));
 
+    // Navegacao por pastas: so aparecem pastas com livros (Jogos/ e Vazia/ nao); entra em
+    // Quadrinhos > DC, confere as migalhas e volta pela raiz.
+    const rootFolders = [...document.querySelectorAll('#folder-grid .folder-card')].map(
+      (el) => el.dataset.folderPath,
+    );
+    results.steps.folders_at_root = rootFolders;
+    if (JSON.stringify(rootFolders) !== JSON.stringify(['Manuais', 'Quadrinhos'])) {
+      throw new Error(`Pastas na raiz inesperadas: ${JSON.stringify(rootFolders)}`);
+    }
+    document.querySelector('#folder-grid .folder-card[data-folder-path="Quadrinhos"]')?.click();
+    await sleep(200);
+    document.querySelector('#folder-grid .folder-card[data-folder-path="Quadrinhos/DC"]')?.click();
+    await sleep(300);
+    const crumbText = document.getElementById('folder-breadcrumb')?.textContent || '';
+    const cbzCards = [...document.querySelectorAll('#library-grid .book-card')].map(
+      (el) => el.dataset.format,
+    );
+    results.steps.folder_navigation = { breadcrumb: crumbText, cards: cbzCards };
+    if (!crumbText.includes('Quadrinhos') || !crumbText.includes('DC') || cbzCards.join() !== 'cbz') {
+      throw new Error(`Navegacao por pastas falhou: ${JSON.stringify(results.steps.folder_navigation)}`);
+    }
+    results.screenshots.push(await api.e2eCaptureScreenshot('09-folder-nav'));
+    document.querySelector('#folder-breadcrumb button.crumb')?.click(); // "Biblioteca" (raiz)
+    await sleep(200);
+
     // 1. Fluxo EPUB: abrir, virar página, aguardar debounce + SSE no celular, testar toast remoto
     await openBookFlow(epubBook);
     await sleep(1000);

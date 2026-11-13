@@ -15,7 +15,7 @@ use std::time::Duration;
 
 pub const CLIENT_DB_FILENAME: &str = "client.db";
 pub const TOKEN_SECRET_FILENAME: &str = "token.secret";
-pub const CURRENT_CLIENT_SCHEMA_VERSION: i32 = 1;
+pub const CURRENT_CLIENT_SCHEMA_VERSION: i32 = 2;
 
 /// DDL completo da versao 1 do banco SQLite local do cliente (`PRAGMA user_version = 1`).
 pub const CLIENT_SCHEMA_V1_DDL: &str = r#"
@@ -146,6 +146,8 @@ pub struct CachedBook {
     pub format: BookFormat,
     pub size_bytes: u64,
     pub mtime_ms: u64,
+    /// Pasta relativa ao vault do servidor (`""` = raiz), separada por `/`.
+    pub folder: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<PositionRecord>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -921,7 +923,7 @@ impl ClientDatabase {
 
         let prev_ids: Vec<(String, String, u64)> = {
             let mut stmt = tx.prepare(
-                "SELECT book_id, title, mtime_ms FROM cached_books ORDER BY book_id ASC",
+                "SELECT book_id, folder || '/' || title, mtime_ms FROM cached_books ORDER BY book_id ASC",
             )?;
             let rows = stmt.query_map([], |r| {
                 Ok((
@@ -937,8 +939,9 @@ impl ClientDatabase {
         for b in books {
             tx.execute(
                 "INSERT INTO cached_books (
-                    book_id, partial_md5, title, format, size_bytes, mtime_ms, etag, updated_at_ms
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7)",
+                    book_id, partial_md5, title, format, size_bytes, mtime_ms, etag, updated_at_ms,
+                    folder
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8)",
                 params![
                     b.book_id,
                     b.partial_md5,
@@ -947,13 +950,14 @@ impl ClientDatabase {
                     b.size_bytes as i64,
                     b.mtime_ms as i64,
                     now_ms as i64,
+                    b.folder,
                 ],
             )?;
         }
 
         let new_ids: Vec<(String, String, u64)> = {
             let mut stmt = tx.prepare(
-                "SELECT book_id, title, mtime_ms FROM cached_books ORDER BY book_id ASC",
+                "SELECT book_id, folder || '/' || title, mtime_ms FROM cached_books ORDER BY book_id ASC",
             )?;
             let rows = stmt.query_map([], |r| {
                 Ok((
@@ -981,7 +985,8 @@ impl ClientDatabase {
             "SELECT
                 b.book_id, b.partial_md5, b.title, b.format, b.size_bytes, b.mtime_ms,
                 p.device_id, p.hlc_canonical, p.hlc_wall_ms, p.hlc_logical, p.hlc_node,
-                p.locator, p.snippet, p.percent, p.server_seq, p.updated_at_ms
+                p.locator, p.snippet, p.percent, p.server_seq, p.updated_at_ms,
+                b.folder
              FROM cached_books b
              LEFT JOIN positions p ON b.book_id = p.book_id
              ORDER BY b.title ASC, b.book_id ASC",
@@ -1024,6 +1029,7 @@ impl ClientDatabase {
                 format,
                 size_bytes: r.get::<_, i64>(4)?.max(0) as u64,
                 mtime_ms: r.get::<_, i64>(5)?.max(0) as u64,
+                folder: r.get(16)?,
                 position,
                 local_path,
             })
@@ -1070,6 +1076,9 @@ pub struct ServerBookEntry {
     pub format: BookFormat,
     pub size_bytes: u64,
     pub mtime_ms: u64,
+    /// Ausente em servidores antigos: vira `""` (raiz).
+    #[serde(default)]
+    pub folder: String,
     #[serde(default)]
     pub position: Option<PositionRecord>,
 }
@@ -1359,6 +1368,13 @@ fn run_migrations(conn: &mut Connection) -> Result<(), rusqlite::Error> {
     if version < 1 {
         let tx = conn.transaction()?;
         tx.execute_batch(CLIENT_SCHEMA_V1_DDL)?;
+        tx.pragma_update(None, "user_version", 1)?;
+        tx.commit()?;
+    }
+    if version < 2 {
+        // v2: pasta do livro no cache da biblioteca (navegacao por subpastas na UI).
+        let tx = conn.transaction()?;
+        tx.execute_batch("ALTER TABLE cached_books ADD COLUMN folder TEXT NOT NULL DEFAULT '';")?;
         tx.pragma_update(None, "user_version", CURRENT_CLIENT_SCHEMA_VERSION)?;
         tx.commit()?;
     }
@@ -1451,5 +1467,46 @@ mod outbox_race_tests {
             "a escrita mais nova deve continuar pendente"
         );
         assert_eq!(pending[0].locator, "page:11");
+    }
+}
+
+#[cfg(test)]
+mod folder_migration_tests {
+    use super::*;
+
+    /// Banco v1 existente (sem a coluna `folder`) deve migrar para v2 sem perder o cache e
+    /// guardar/ler a pasta dos livros novos.
+    #[test]
+    fn v1_cache_migrates_and_roundtrips_folder() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        {
+            let conn = Connection::open(dir.path().join(CLIENT_DB_FILENAME)).expect("conn");
+            conn.execute_batch(CLIENT_SCHEMA_V1_DDL).expect("ddl v1");
+            conn.pragma_update(None, "user_version", 1).expect("v1");
+            conn.execute(
+                "INSERT INTO cached_books (book_id, partial_md5, title, format, size_bytes, mtime_ms, etag, updated_at_ms)
+                 VALUES ('d41d8cd98f00b204e9800998ecf8427e-10', 'd41d8cd98f00b204e9800998ecf8427e', 'Antigo', 'pdf', 10, 1, NULL, 1)",
+                [],
+            )
+            .expect("insert v1");
+        }
+        let db = ClientDatabase::open(dir.path(), "teste").expect("open migra");
+        let books = db.load_cached_library().expect("load");
+        assert_eq!(books.len(), 1);
+        assert_eq!(books[0].folder, "", "livro antigo cai na raiz");
+
+        let entry = ServerBookEntry {
+            book_id: "d41d8cd98f00b204e9800998ecf8427e-10".into(),
+            partial_md5: "d41d8cd98f00b204e9800998ecf8427e".into(),
+            title: "Antigo".into(),
+            format: BookFormat::Pdf,
+            size_bytes: 10,
+            mtime_ms: 1,
+            folder: "dnd/regras".into(),
+            position: None,
+        };
+        let (books, changed, _) = db.store_library_snapshot(&[entry], 5).expect("snapshot");
+        assert!(changed, "mudar so a pasta conta como mudanca da biblioteca");
+        assert_eq!(books[0].folder, "dnd/regras");
     }
 }

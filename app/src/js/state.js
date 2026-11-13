@@ -202,6 +202,80 @@ export function filterAndSortLibrary(books, query = '') {
 }
 
 /**
+ * Normaliza um caminho de pasta do servidor (`a/b`, sem barras nas pontas; `""` = raiz).
+ * @param {unknown} p
+ * @returns {string}
+ */
+export function normalizeFolderPath(p) {
+  if (typeof p !== 'string') return '';
+  return p
+    .split('/')
+    .filter((seg) => seg !== '' && seg !== '.' && seg !== '..')
+    .join('/');
+}
+
+/**
+ * Monta a visao de uma pasta a partir da lista plana de livros. As pastas sao DERIVADAS dos
+ * livros (campo `folder`), entao uma pasta sem nenhum EPUB/PDF/CBZ (nem nas subpastas) nunca
+ * aparece.
+ * @param {Array<object>} books
+ * @param {string} currentPath pasta atual (`""` = raiz)
+ * @returns {{ folders: Array<{name: string, path: string, count: number}>, books: Array<object> }}
+ */
+export function buildFolderView(books, currentPath = '') {
+  const cur = normalizeFolderPath(currentPath);
+  const prefix = cur === '' ? '' : `${cur}/`;
+  const direct = [];
+  const subfolders = new Map();
+  for (const b of Array.isArray(books) ? books : []) {
+    const f = normalizeFolderPath(b.folder);
+    if (f === cur) {
+      direct.push(b);
+    } else if (f.startsWith(prefix)) {
+      const name = f.slice(prefix.length).split('/')[0];
+      const entry = subfolders.get(name) || { name, path: `${prefix}${name}`, count: 0 };
+      entry.count += 1;
+      subfolders.set(name, entry);
+    }
+  }
+  return {
+    folders: [...subfolders.values()].sort((a, b) => naturalCompare(a.name, b.name)),
+    books: direct.sort((a, b) => naturalCompare(a.title || '', b.title || '')),
+  };
+}
+
+/**
+ * Migalhas de pao ate a pasta: `a/b` -> [{name:'a', path:'a'}, {name:'b', path:'a/b'}].
+ * @param {string} path
+ * @returns {Array<{name: string, path: string}>}
+ */
+export function folderBreadcrumbs(path) {
+  const segs = normalizeFolderPath(path).split('/').filter(Boolean);
+  return segs.map((name, i) => ({ name, path: segs.slice(0, i + 1).join('/') }));
+}
+
+/**
+ * Se a pasta atual deixou de ter livros (ex.: apagada no servidor), sobe ate a pasta
+ * ancestral mais proxima que ainda tem conteudo (no limite, a raiz).
+ * @param {Array<object>} books
+ * @param {string} path
+ * @returns {string}
+ */
+export function resolveExistingFolder(books, path) {
+  let cur = normalizeFolderPath(path);
+  const list = Array.isArray(books) ? books : [];
+  while (cur !== '') {
+    const prefix = `${cur}/`;
+    if (list.some((b) => {
+      const f = normalizeFolderPath(b.folder);
+      return f === cur || f.startsWith(prefix);
+    })) return cur;
+    cur = cur.includes('/') ? cur.slice(0, cur.lastIndexOf('/')) : '';
+  }
+  return '';
+}
+
+/**
  * Cria um debouncer (~1500 ms por padrão) com suporte a `flush()` imediato
  * (para salvar posição ao fechar/pausar o leitor) e `cancel()`.
  * @param {Function} fn

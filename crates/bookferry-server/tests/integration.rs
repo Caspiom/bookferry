@@ -1321,3 +1321,57 @@ async fn mdns_live_announcement_on_loopback() {
     tokio::time::sleep(Duration::from_millis(200)).await;
     handle.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn books_expose_folder_and_ignore_dirs_without_supported_files() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().join("data");
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(vault_dir.join("hqs/DC/Swamp Thing")).unwrap();
+    std::fs::create_dir_all(vault_dir.join("dnd/regras")).unwrap();
+    std::fs::create_dir_all(vault_dir.join("jogos/KONAMI/save")).unwrap();
+    std::fs::create_dir_all(vault_dir.join("vazia")).unwrap();
+    std::fs::write(vault_dir.join("solto.pdf"), b"%PDF-1.4 solto").unwrap();
+    std::fs::write(
+        vault_dir.join("hqs/DC/Swamp Thing/vol1.cbz"),
+        b"PK cbz vol1",
+    )
+    .unwrap();
+    std::fs::write(vault_dir.join("dnd/regras/phb.pdf"), b"%PDF-1.4 phb").unwrap();
+    // pastas sem EPUB/PDF/CBZ: nada deve vazar para a biblioteca
+    std::fs::write(vault_dir.join("jogos/KONAMI/save/BL0000"), b"bin").unwrap();
+    std::fs::write(vault_dir.join("jogos/KONAMI/leia.txt"), b"txt").unwrap();
+    std::fs::write(vault_dir.join("dnd/ficha.docx"), b"docx").unwrap();
+
+    let handle = start(test_config(&data_dir, &vault_dir)).await.unwrap();
+    let qr = handle.pairing_payload();
+    let client = PinnedTestClient::new(
+        handle.local_addr(),
+        handle.cert_sha256(),
+        Some(handle.spki_sha256()),
+    );
+    let (_, pair_bytes) = client.pair_device(&qr.secret, "PC").await;
+    let pair: PairResponse = serde_json::from_slice(&pair_bytes).unwrap();
+
+    let (_, resp): (_, BooksListResponse) = client
+        .request_json(Method::GET, "/books", Some(&pair.token), Vec::new())
+        .await;
+    let mut got: Vec<(String, String)> = resp
+        .books
+        .iter()
+        .map(|b| (b.title.clone(), b.folder.clone()))
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        vec![
+            ("phb".to_string(), "dnd/regras".to_string()),
+            ("solto".to_string(), String::new()),
+            ("vol1".to_string(), "hqs/DC/Swamp Thing".to_string()),
+        ]
+    );
+    // o nome do arquivo e o caminho absoluto nunca saem na API
+    let raw = serde_json::to_string(&resp).unwrap();
+    assert!(!raw.contains(vault_dir.to_str().unwrap()));
+    assert!(!raw.contains("vol1.cbz"));
+}

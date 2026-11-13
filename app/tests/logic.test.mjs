@@ -3,16 +3,20 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  buildFolderView,
   computePagePercent,
   createDebouncer,
   deriveCoverStyle,
   filterAndSortLibrary,
+  folderBreadcrumbs,
   formatBytes,
   formatPageLocator,
   formatPercent,
   isEpubCfi,
   naturalCompare,
+  normalizeFolderPath,
   parsePageLocator,
+  resolveExistingFolder,
 } from '../src/js/state.js';
 
 describe('Ordenação natural de páginas (naturalCompare)', () => {
@@ -150,5 +154,68 @@ describe('Debounce de salvamento de posição com flush imediato', () => {
     // Aguardar o tempo original não deve disparar chamada duplicada
     await new Promise((r) => setTimeout(r, 110));
     assert.equal(calls.length, 1);
+  });
+});
+
+describe('Navegação por pastas', () => {
+  const books = [
+    { book_id: 'a', title: 'Solto', folder: '' },
+    { book_id: 'b', title: 'PHB', folder: 'dnd/regras' },
+    { book_id: 'c', title: 'DMG', folder: 'dnd/regras' },
+    { book_id: 'd', title: 'Ficha 10', folder: 'dnd/campanha/Personagens' },
+    { book_id: 'e', title: 'Ficha 2', folder: 'dnd/campanha/Personagens' },
+    { book_id: 'f', title: 'Nemo', folder: 'hqs' },
+    { book_id: 'g', title: 'Sem campo folder (servidor antigo)' },
+  ];
+
+  it('raiz: lista só pastas com livros dentro (contagem recursiva) e livros soltos', () => {
+    const v = buildFolderView(books, '');
+    assert.deepEqual(v.folders.map((f) => [f.name, f.path, f.count]), [
+      ['dnd', 'dnd', 4],
+      ['hqs', 'hqs', 1],
+    ]);
+    assert.deepEqual(v.books.map((b) => b.book_id).sort(), ['a', 'g']);
+  });
+
+  it('pasta sem nenhum livro nunca aparece (pastas são derivadas dos livros)', () => {
+    // "jogos" existe no disco mas não tem EPUB/PDF/CBZ: o servidor não manda nenhum livro dela
+    const v = buildFolderView(books, '');
+    assert.equal(v.folders.some((f) => f.name === 'jogos'), false);
+  });
+
+  it('entra em subpasta e ordena livros em ordem natural', () => {
+    const v = buildFolderView(books, 'dnd');
+    assert.deepEqual(v.folders.map((f) => f.path), ['dnd/campanha', 'dnd/regras']);
+    assert.equal(v.books.length, 0);
+    const leaf = buildFolderView(books, 'dnd/campanha/Personagens');
+    assert.deepEqual(leaf.books.map((b) => b.title), ['Ficha 2', 'Ficha 10']);
+    assert.equal(leaf.folders.length, 0);
+  });
+
+  it('não confunde pastas com prefixo parecido (dnd vs dnd2)', () => {
+    const v = buildFolderView([{ book_id: 'x', title: 'X', folder: 'dnd2/a' }], 'dnd');
+    assert.equal(v.folders.length, 0);
+    assert.equal(v.books.length, 0);
+  });
+
+  it('normalizeFolderPath descarta barras extras, ponto e ..', () => {
+    assert.equal(normalizeFolderPath('/a//b/'), 'a/b');
+    assert.equal(normalizeFolderPath('a/../b/./c'), 'a/b/c');
+    assert.equal(normalizeFolderPath(undefined), '');
+  });
+
+  it('folderBreadcrumbs gera caminho acumulado', () => {
+    assert.deepEqual(folderBreadcrumbs('a/b'), [
+      { name: 'a', path: 'a' },
+      { name: 'b', path: 'a/b' },
+    ]);
+    assert.deepEqual(folderBreadcrumbs(''), []);
+  });
+
+  it('resolveExistingFolder sobe até o ancestral que ainda tem livros', () => {
+    assert.equal(resolveExistingFolder(books, 'dnd/regras'), 'dnd/regras');
+    assert.equal(resolveExistingFolder(books, 'dnd/apagada/x'), 'dnd');
+    assert.equal(resolveExistingFolder(books, 'nada/mais'), '');
+    assert.equal(resolveExistingFolder(books, 'dnd'), 'dnd');
   });
 });

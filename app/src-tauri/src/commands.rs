@@ -110,6 +110,7 @@ pub struct BookViewDto {
     pub format: BookFormat,
     pub size_bytes: u64,
     pub mtime_ms: u64,
+    pub folder: String,
     pub downloaded: bool,
     pub position: Option<PositionRecord>,
 }
@@ -558,6 +559,7 @@ pub async fn library(state: tauri::State<'_, Arc<AppState>>) -> Result<LibraryVi
                 format: b.format,
                 size_bytes: b.size_bytes,
                 mtime_ms: b.mtime_ms,
+                folder: b.folder,
                 downloaded,
                 position: b.position,
             }

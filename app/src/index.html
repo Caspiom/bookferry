@@ -158,10 +158,19 @@
           <div id="continue-reading-grid" class="book-grid continue-grid"></div>
         </section>
 
-        <!-- Todos os livros -->
-        <section class="library-section" aria-label="Todos os livros">
+        <!-- Navegação por pastas -->
+        <nav id="folder-breadcrumb" class="folder-breadcrumb hidden" aria-label="Pasta atual"></nav>
+        <section id="folders-section" class="library-section hidden" aria-label="Pastas">
           <div class="section-header">
-            <h2>Todos os títulos</h2>
+            <h2>Pastas</h2>
+          </div>
+          <div id="folder-grid" class="book-grid folder-grid"></div>
+        </section>
+
+        <!-- Livros da pasta atual -->
+        <section id="books-section" class="library-section" aria-label="Livros">
+          <div class="section-header">
+            <h2 id="books-section-title">Livros</h2>
           </div>
           <div id="library-grid" class="book-grid"></div>
           <div id="library-empty-state" class="empty-state hidden">
