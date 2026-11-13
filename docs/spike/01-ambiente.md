@@ -8,9 +8,9 @@ Data: 13/11/2026 · Máquina: NixOS 26.5, Nix 2.34.9, fish, niri (Wayland), GPU 
 |---|---|
 | devShell Nix reproduzível (`spike/flake.nix` + `flake.lock`) | **OK** |
 | (a) Linux: `cargo tauri build --no-bundle` | **OK** (binário gerado) |
-| (a) Janela abre sob Wayland/NVIDIA | **NÃO VERIFICADO** (sessão do agente sem display; ver abaixo) |
+| (a) Janela abre sob Wayland/NVIDIA | **OK** — verificado pelo Lucas na sessão niri: abre e `ping` responde `pong` (o agente não pôde testar: sem display). Não registrei se `WEBKIT_DISABLE_DMABUF_RENDERER=1` é necessário. |
 | (b) Android: `cargo tauri android init` + `build --debug` (aarch64) | **OK** — APK gerado |
-| (b) APK roda em dispositivo/emulador | **NÃO VERIFICADO** (nenhum dispositivo; nenhum emulador instalado) |
+| (b) APK roda em dispositivo | **OK** — Samsung SM-S918B, Android 15, instalado por `adb install`; tela "Bookferry spike" + botão `ping` retornam `pong, Bookferry (rust 0.0.1 / android)` (conferido por captura de tela via `adb`) |
 
 ## Como reproduzir
 
@@ -115,3 +115,10 @@ A tela mostra "Bookferry spike" e um botão `ping`; ao clicar deve aparecer `pon
 - `~/.android` já existia antes (chaves do adb, de jan/2026) e não foi modificado; `~/.gradle` não foi criado. Tudo do Gradle/Cargo/npm ficou em `spike/.cache`.
 - `git add -N` foi usado em `spike/flake.nix` (e o Nix marcou `flake.lock`); nada foi commitado.
 - Arquivos para commit: `spike/flake.nix`, `spike/flake.lock`, `spike/.gitignore`, `spike/scripts/`, `spike/app/` (incluindo `src-tauri/Cargo.lock` e `gen/android`; `gen/android/.gradle` e `build` já são ignorados pelo `.gitignore` raiz), e este relatório.
+
+
+## Atualização (verificação no aparelho, 13/11/2026)
+
+- Linux: o Lucas rodou o binário na sessão niri; abriu e o `ping` respondeu. Ponte frontend→Rust funciona no desktop.
+- Android: APK debug aarch64 instalado no SM-S918B por USB direto (hub USB 2.0 não funcionou). Captura de tela mostrou fundo escuro, título, botão `ping` e a resposta `pong, Bookferry (rust 0.0.1 / android)`. Sem `FATAL`/`panicked` no logcat.
+- Continuam não verificados: armv7/x86_64/i686, build release, `tauri dev`, riscos 1–6 e 8 do plano.
