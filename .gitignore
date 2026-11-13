@@ -6,3 +6,5 @@ spike/**/gen/android/build/
 result
 .direnv/
 spike/.agy-*.log
+spike/fixtures/*
+!spike/fixtures/README.md
