@@ -12,6 +12,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::watch;
+
+/// Porta fixa do servidor embutido no desktop (a que o firewall do PC libera).
+#[cfg(not(target_os = "android"))]
+const DEFAULT_SERVER_PORT: u16 = 47600;
 #[cfg(any(not(target_os = "android"), bookferry_e2e))]
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -330,16 +334,29 @@ pub async fn start_or_restart_desktop_server(
         announce_ips.push(loopback_ip);
     }
 
-    let mut srv_cfg = ServerConfig::new(&server_data_dir, &vault_dir);
-    srv_cfg.bind_addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
-    srv_cfg.port = 0;
-    srv_cfg.announce_ips = announce_ips;
-    srv_cfg.server_name = "Bookferry PC".to_string();
-    srv_cfg.enable_mdns = !cfg!(bookferry_e2e);
+    let make_cfg = |port: u16| {
+        let mut cfg = ServerConfig::new(&server_data_dir, &vault_dir);
+        cfg.bind_addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+        cfg.port = port;
+        cfg.announce_ips = announce_ips.clone();
+        cfg.server_name = "Bookferry PC".to_string();
+        cfg.enable_mdns = !cfg!(bookferry_e2e);
+        cfg
+    };
 
-    let handle = bookferry_server::start(srv_cfg)
-        .await
-        .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?;
+    // Porta fixa 47600: é a que o firewall do PC libera (uma porta aleatória fica bloqueada para o celular).
+    // Se estiver ocupada (ou no E2E), cai para uma porta livre.
+    let handle = match (!cfg!(bookferry_e2e)).then(|| make_cfg(DEFAULT_SERVER_PORT)) {
+        Some(cfg) => match bookferry_server::start(cfg).await {
+            Ok(h) => h,
+            Err(_) => bookferry_server::start(make_cfg(0))
+                .await
+                .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?,
+        },
+        None => bookferry_server::start(make_cfg(0))
+            .await
+            .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?,
+    };
 
     let bound_port = handle.local_addr().port();
 
