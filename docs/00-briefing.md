@@ -1,4 +1,4 @@
-# Briefing — Lombada
+# Briefing — Bookferry
 
 ## Ideia
 Leitor de livros e quadrinhos para PC (Linux/NixOS, também ideal Windows/macOS) e Android, com sincronização
@@ -13,9 +13,8 @@ das features e da usabilidade dos dois.
 3. Lista "Ler a seguir": usuário digita o nome do livro; o app busca a capa na web e adiciona nome + capa à lista.
    A lista também deve sincronizar.
 4. Biblioteca: organização, metadados, capas, progresso, coleções/séries (comum em quadrinhos).
-5. Servidor de sync **self-hosted simples em Rust**, alcançável por HTTPS público, **sem depender de VPN ou serviços externos** (VPS barata). Preferência por IaC/terminal.
-6. Uso pessoal agora (1 usuário, vários dispositivos), mas **com possibilidade de abrir para outros usuários depois** —
-   não bloquear essa evolução (auth, isolamento por usuário no modelo de dados).
+5. **O "servidor" é o PC de cada usuário** (app desktop com servidor Rust embutido; livros e banco ficam lá). O celular sincroniza pela rede local e, fora de casa, por um **relay opcional sem estado** (cifrado ponta a ponta). Sem VPN nem serviços de terceiros. Preferência por IaC/terminal.
+6. Cada usuário roda o próprio Bookferry (multiusuário = várias instâncias, não várias contas num servidor).
 7. Stack de cliente: **em aberto** — comparar Flutter, Kotlin Multiplatform, Tauri + Android nativo, React Native etc.
 
 ## Restrições
