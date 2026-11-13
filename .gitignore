@@ -8,3 +8,4 @@ result
 spike/.agy-*.log
 spike/fixtures/*
 !spike/fixtures/README.md
+spike/vendor/

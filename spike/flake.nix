@@ -92,6 +92,7 @@
           wget
           file
           unzip
+          xvfb-run
         ]);
 
         ANDROID_HOME = androidHome;

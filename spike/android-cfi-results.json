@@ -1,0 +1,731 @@
+{
+  "frankenstein-pg84.epub": {
+    "epub": "frankenstein-pg84.epub",
+    "platform": "android",
+    "user_agent": "Mozilla/5.0 (Linux; Android 15; SM-S918B Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/157.0.8103.40 Mobile Safari/537.36",
+    "elapsed_ms": 584.7,
+    "spine_sections": 32,
+    "toc_entries_total": 32,
+    "dom_chapters": [
+      {
+        "label": "Frankenstein;",
+        "href": "OEBPS/4328224471496264690_84-h-0.htm.xhtml#pgepubid00000",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/6[pgepubid00000])",
+        "snippet": "Frankenstein; or, the Modern Prometheus by Mary Wollstonecraft (Godwin) Shelley"
+      },
+      {
+        "label": "or, the Modern Prometheus",
+        "href": "OEBPS/4328224471496264690_84-h-0.htm.xhtml#pgepubid00001",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/8[pgepubid00001])",
+        "snippet": "or, the Modern Prometheus by Mary Wollstonecraft (Godwin) Shelley"
+      },
+      {
+        "label": "CONTENTS",
+        "href": "OEBPS/4328224471496264690_84-h-1.htm.xhtml#pgepubid00002",
+        "section_index": 2,
+        "cfi": "epubcfi(/6/6!/4/2[pgepubid00002])",
+        "snippet": "CONTENTS Letter 1 Letter 2 Letter 3 Letter 4 Chapter 1 Chapter 2 Chapter 3 Chapt"
+      },
+      {
+        "label": "Letter 1",
+        "href": "OEBPS/4328224471496264690_84-h-2.htm.xhtml#pgepubid00003",
+        "section_index": 3,
+        "cfi": "epubcfi(/6/8!/4/2[pgepubid00003])",
+        "snippet": "Letter 1 To Mrs. Saville, England. St. Petersburgh, Dec. 11th, 17\u2014. You will rej"
+      },
+      {
+        "label": "Letter 2",
+        "href": "OEBPS/4328224471496264690_84-h-3.htm.xhtml#pgepubid00004",
+        "section_index": 4,
+        "cfi": "epubcfi(/6/10!/4/2[pgepubid00004])",
+        "snippet": "Letter 2 To Mrs. Saville, England. Archangel, 28th March, 17\u2014. How slowly the ti"
+      }
+    ],
+    "dom_fractions": [
+      {
+        "fraction": 0.1,
+        "section_index": 7,
+        "fraction_in_section": 0.529053,
+        "total_chars_in_section": 10177,
+        "target_char": 5384,
+        "cfi": "epubcfi(/6/16!/4/2[pgepubid00007]/16/1:465)",
+        "snippet": "laything and their idol, and something better\u2014their child, the innocent and help"
+      },
+      {
+        "fraction": 0.5,
+        "section_index": 19,
+        "fraction_in_section": 0.996927,
+        "total_chars_in_section": 11624,
+        "target_char": 11588,
+        "cfi": "epubcfi(/6/40!/4/2[pgepubid00019]/46/1:300)",
+        "snippet": "nful self-deceit, to call them).\u201d"
+      },
+      {
+        "fraction": 0.9,
+        "section_index": 30,
+        "fraction_in_section": 0.423996,
+        "total_chars_in_section": 45799,
+        "target_char": 19418,
+        "cfi": "epubcfi(/6/62!/4/2[pgepubid00030]/70/1:92)",
+        "snippet": "t of general literature he displays unbounded knowledge and a quick and piercing"
+      }
+    ],
+    "paginator_chapters": [
+      {
+        "label": "Frankenstein;",
+        "href": "OEBPS/4328224471496264690_84-h-0.htm.xhtml#pgepubid00000",
+        "full_range_cfi": "epubcfi(/6/4!/4,/2[pg-header]/8[pg-start-separator],/12)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/2[pg-header]/8[pg-start-separator])",
+        "snippet": "*** START OF THE PROJECT GUTENBERG EBOOK FRANKENSTEIN; OR, THE MODERN PROMETHEUS"
+      },
+      {
+        "label": "or, the Modern Prometheus",
+        "href": "OEBPS/4328224471496264690_84-h-0.htm.xhtml#pgepubid00001",
+        "full_range_cfi": "epubcfi(/6/4!/4,/2[pg-header]/8[pg-start-separator],/12)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/2[pg-header]/8[pg-start-separator])",
+        "snippet": "*** START OF THE PROJECT GUTENBERG EBOOK FRANKENSTEIN; OR, THE MODERN PROMETHEUS"
+      },
+      {
+        "label": "CONTENTS",
+        "href": "OEBPS/4328224471496264690_84-h-1.htm.xhtml#pgepubid00002",
+        "full_range_cfi": "epubcfi(/6/6!/4/2[pgepubid00002],/2,/4/2/24/2/2/1:9)",
+        "collapsed_start_cfi": "epubcfi(/6/6!/4/2[pgepubid00002]/2)",
+        "snippet": "CONTENTS Letter 1 Letter 2 Letter 3 Letter 4 Chapter 1 Chapter 2 Chapter 3 Chapt"
+      },
+      {
+        "label": "Letter 1",
+        "href": "OEBPS/4328224471496264690_84-h-2.htm.xhtml#pgepubid00003",
+        "full_range_cfi": "epubcfi(/6/8!/4/2[pgepubid00003],/2,/10/1:123)",
+        "collapsed_start_cfi": "epubcfi(/6/8!/4/2[pgepubid00003]/2)",
+        "snippet": "Letter 1 To Mrs. Saville, England. St. Petersburgh, Dec. 11th, 17\u2014. You will rej"
+      },
+      {
+        "label": "Letter 2",
+        "href": "OEBPS/4328224471496264690_84-h-3.htm.xhtml#pgepubid00004",
+        "full_range_cfi": "epubcfi(/6/10!/4/2[pgepubid00004],/2,/10/1:116)",
+        "collapsed_start_cfi": "epubcfi(/6/10!/4/2[pgepubid00004]/2)",
+        "snippet": "Letter 2 To Mrs. Saville, England. Archangel, 28th March, 17\u2014. How slowly the ti"
+      }
+    ],
+    "paginator_fractions": [
+      {
+        "fraction": 0.1,
+        "full_range_cfi": "epubcfi(/6/16!/4/2[pgepubid00007]/16,/1:79,/1:858)",
+        "collapsed_start_cfi": "epubcfi(/6/16!/4/2[pgepubid00007]/16/1:79)",
+        "snippet": "Naples, and as an infant accompanied them in their rambles. I remained for sever"
+      },
+      {
+        "fraction": 0.5,
+        "full_range_cfi": "epubcfi(/6/40!/4/2[pgepubid00019]/46,/1:268,/1:334)",
+        "collapsed_start_cfi": "epubcfi(/6/40!/4/2[pgepubid00019]/46/1:268)",
+        "snippet": "loved, in an innocent, half-painful self-deceit, to call them).\u201d"
+      },
+      {
+        "fraction": 0.9,
+        "full_range_cfi": "epubcfi(/6/62!/4/2[pgepubid00030],/68/1:584,/70/1:365)",
+        "collapsed_start_cfi": "epubcfi(/6/62!/4/2[pgepubid00030]/68/1:584)",
+        "snippet": "dreams he holds converse with his friends and derives from that communion consol"
+      }
+    ],
+    "reverse_resolutions": [
+      {
+        "kind": "dom_10%",
+        "cfi": "epubcfi(/6/16!/4/2[pgepubid00007]/16/1:465)",
+        "resolved_section": 7,
+        "source_snippet": "laything and their idol, and something better\u2014their child, the innocent and help",
+        "resolved_dom_snippet": "laything and their idol, and something better\u2014their child, the innocent and help",
+        "resolved_paginator_snippet": "Naples, and as an infant accompanied them in their rambles. I remained for sever",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_50%",
+        "cfi": "epubcfi(/6/40!/4/2[pgepubid00019]/46/1:300)",
+        "resolved_section": 19,
+        "source_snippet": "nful self-deceit, to call them).\u201d",
+        "resolved_dom_snippet": "nful self-deceit, to call them).\u201d",
+        "resolved_paginator_snippet": "loved, in an innocent, half-painful self-deceit, to call them).\u201d",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_90%",
+        "cfi": "epubcfi(/6/62!/4/2[pgepubid00030]/70/1:92)",
+        "resolved_section": 30,
+        "source_snippet": "t of general literature he displays unbounded knowledge and a quick and piercing",
+        "resolved_dom_snippet": "t of general literature he displays unbounded knowledge and a quick and piercing",
+        "resolved_paginator_snippet": "dreams he holds converse with his friends and derives from that communion consol",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_ch_1",
+        "cfi": "epubcfi(/6/4!/4/6[pgepubid00000])",
+        "resolved_section": 1,
+        "source_snippet": "Frankenstein; or, the Modern Prometheus by Mary Wollstonecraft (Godwin) Shelley",
+        "resolved_dom_snippet": "Frankenstein; or, the Modern Prometheus by Mary Wollstonecraft (Godwin) Shelley",
+        "resolved_paginator_snippet": "*** START OF THE PROJECT GUTENBERG EBOOK FRANKENSTEIN; OR, THE MODERN PROMETHEUS",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_ch_2",
+        "cfi": "epubcfi(/6/4!/4/8[pgepubid00001])",
+        "resolved_section": 1,
+        "source_snippet": "or, the Modern Prometheus by Mary Wollstonecraft (Godwin) Shelley",
+        "resolved_dom_snippet": "or, the Modern Prometheus by Mary Wollstonecraft (Godwin) Shelley",
+        "resolved_paginator_snippet": "*** START OF THE PROJECT GUTENBERG EBOOK FRANKENSTEIN; OR, THE MODERN PROMETHEUS",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_ch_3",
+        "cfi": "epubcfi(/6/6!/4/2[pgepubid00002])",
+        "resolved_section": 2,
+        "source_snippet": "CONTENTS Letter 1 Letter 2 Letter 3 Letter 4 Chapter 1 Chapter 2 Chapter 3 Chapt",
+        "resolved_dom_snippet": "CONTENTS Letter 1 Letter 2 Letter 3 Letter 4 Chapter 1 Chapter 2 Chapter 3 Chapt",
+        "resolved_paginator_snippet": "CONTENTS Letter 1 Letter 2 Letter 3 Letter 4 Chapter 1 Chapter 2 Chapter 3 Chapt",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_4",
+        "cfi": "epubcfi(/6/8!/4/2[pgepubid00003])",
+        "resolved_section": 3,
+        "source_snippet": "Letter 1 To Mrs. Saville, England. St. Petersburgh, Dec. 11th, 17\u2014. You will rej",
+        "resolved_dom_snippet": "Letter 1 To Mrs. Saville, England. St. Petersburgh, Dec. 11th, 17\u2014. You will rej",
+        "resolved_paginator_snippet": "Letter 1 To Mrs. Saville, England. St. Petersburgh, Dec. 11th, 17\u2014. You will rej",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_5",
+        "cfi": "epubcfi(/6/10!/4/2[pgepubid00004])",
+        "resolved_section": 4,
+        "source_snippet": "Letter 2 To Mrs. Saville, England. Archangel, 28th March, 17\u2014. How slowly the ti",
+        "resolved_dom_snippet": "Letter 2 To Mrs. Saville, England. Archangel, 28th March, 17\u2014. How slowly the ti",
+        "resolved_paginator_snippet": "Letter 2 To Mrs. Saville, England. Archangel, 28th March, 17\u2014. How slowly the ti",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "pag_10%_collapsed",
+        "cfi": "epubcfi(/6/16!/4/2[pgepubid00007]/16/1:79)",
+        "resolved_section": 7,
+        "source_snippet": "Naples, and as an infant accompanied them in their rambles. I remained for sever",
+        "resolved_dom_snippet": "Naples, and as an infant accompanied them in their rambles. I remained for sever",
+        "resolved_paginator_snippet": "convenience. He strove to shelter her, as a fair exotic is sheltered by the gard",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "pag_50%_collapsed",
+        "cfi": "epubcfi(/6/40!/4/2[pgepubid00019]/46/1:268)",
+        "resolved_section": 19,
+        "source_snippet": "loved, in an innocent, half-painful self-deceit, to call them).\u201d",
+        "resolved_dom_snippet": "loved, in an innocent, half-painful self-deceit, to call them).\u201d",
+        "resolved_paginator_snippet": "\u201cBut where were my friends and relations? No father had watched my infant days, ",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "pag_90%_collapsed",
+        "cfi": "epubcfi(/6/62!/4/2[pgepubid00030]/68/1:584)",
+        "resolved_section": 30,
+        "source_snippet": "dreams he holds converse with his friends and derives from that communion consol",
+        "resolved_dom_snippet": "dreams he holds converse with his friends and derives from that communion consol",
+        "resolved_paginator_snippet": "dreams he holds converse with his friends and derives from that communion consol",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      }
+    ]
+  },
+  "moby-dick-pg2701.epub": {
+    "epub": "moby-dick-pg2701.epub",
+    "platform": "android",
+    "user_agent": "Mozilla/5.0 (Linux; Android 15; SM-S918B Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/157.0.8103.40 Mobile Safari/537.36",
+    "elapsed_ms": 1039,
+    "spine_sections": 13,
+    "toc_entries_total": 145,
+    "dom_chapters": [
+      {
+        "label": "MOBY-DICK; or, THE WHALE.",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00000",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/6[pgepubid00000])",
+        "snippet": "MOBY-DICK; or, THE WHALE. By Herman Melville"
+      },
+      {
+        "label": "ETYMOLOGY.",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00001",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/26/6[pgepubid00001])",
+        "snippet": "ETYMOLOGY. (Supplied by a Late Consumptive Usher to a Grammar School.) The pale "
+      },
+      {
+        "label": "(Supplied by a Late Consumptive Usher to a Grammar",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00002",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/26/8[pgepubid00002])",
+        "snippet": "(Supplied by a Late Consumptive Usher to a Grammar School.) The pale Usher\u2014threa"
+      },
+      {
+        "label": "EXTRACTS. (Supplied by a Sub-Sub-Librarian).",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00003",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/26/24[pgepubid00003])",
+        "snippet": "EXTRACTS. (Supplied by a Sub-Sub-Librarian). It will be seen that this mere pain"
+      },
+      {
+        "label": "EXTRACTS.",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00004",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/26/30[pgepubid00004])",
+        "snippet": "EXTRACTS. \u201cAnd God created great whales.\u201d \u2014Genesis. \u201cLeviathan maketh a path to "
+      }
+    ],
+    "dom_fractions": [
+      {
+        "fraction": 0.1,
+        "section_index": 2,
+        "fraction_in_section": 0.037319,
+        "total_chars_in_section": 134720,
+        "target_char": 5027,
+        "cfi": "epubcfi(/6/6!/4/14/1:800)",
+        "snippet": "le ship, and bear a hardy helm; for lo! the sun is breaking through; the clouds "
+      },
+      {
+        "fraction": 0.5,
+        "section_index": 6,
+        "fraction_in_section": 0.195008,
+        "total_chars_in_section": 129776,
+        "target_char": 25307,
+        "cfi": "epubcfi(/6/14!/4/106/1:264)",
+        "snippet": "beheld, that though one and all of them declare it to be the largest animated th"
+      },
+      {
+        "fraction": 0.9,
+        "section_index": 10,
+        "fraction_in_section": 0.485904,
+        "total_chars_in_section": 133071,
+        "target_char": 64659,
+        "cfi": "epubcfi(/6/22!/4/398/1:599)",
+        "snippet": "g down, a little tossed heap of white bubbles in the blue of the sea. The life-b"
+      }
+    ],
+    "paginator_chapters": [
+      {
+        "label": "MOBY-DICK; or, THE WHALE.",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00000",
+        "full_range_cfi": "epubcfi(/6/4!/4,/6[pgepubid00000],/8/2)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/6[pgepubid00000])",
+        "snippet": "MOBY-DICK; or, THE WHALE."
+      },
+      {
+        "label": "ETYMOLOGY.",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00001",
+        "full_range_cfi": "epubcfi(/6/4!/4/26,/6[pgepubid00001],/12/1:185)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/26/6[pgepubid00001])",
+        "snippet": "ETYMOLOGY. (Supplied by a Late Consumptive Usher to a Grammar School.) The pale "
+      },
+      {
+        "label": "(Supplied by a Late Consumptive Usher to a Grammar",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00002",
+        "full_range_cfi": "epubcfi(/6/4!/4/26,/6[pgepubid00001],/12/1:185)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/26/6[pgepubid00001])",
+        "snippet": "ETYMOLOGY. (Supplied by a Late Consumptive Usher to a Grammar School.) The pale "
+      },
+      {
+        "label": "EXTRACTS. (Supplied by a Sub-Sub-Librarian).",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00003",
+        "full_range_cfi": "epubcfi(/6/4!/4/26,/24[pgepubid00003],/26/1:640)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/26/24[pgepubid00003])",
+        "snippet": "EXTRACTS. (Supplied by a Sub-Sub-Librarian). It will be seen that this mere pain"
+      },
+      {
+        "label": "EXTRACTS.",
+        "href": "OEBPS/4851588220423269_2701-h-0.htm.xhtml#pgepubid00004",
+        "full_range_cfi": "epubcfi(/6/4!/4/26,/28/1:603,/34/3:8)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/26/28/1:603)",
+        "snippet": "thankless! Would that I could clear out Hampton Court and the Tuileries for ye! "
+      }
+    ],
+    "paginator_fractions": [
+      {
+        "fraction": 0.1,
+        "full_range_cfi": "epubcfi(/6/6!/4,/12/1:674,/14/1:734)",
+        "collapsed_start_cfi": "epubcfi(/6/6!/4/12/1:674)",
+        "snippet": "stronghold\u2014a lofty Ehrenbreitstein, with a perennial well of water within the wa"
+      },
+      {
+        "fraction": 0.5,
+        "full_range_cfi": "epubcfi(/6/14!/4,/96/1:707,/104/1:120)",
+        "collapsed_start_cfi": "epubcfi(/6/14!/4/96/1:707)",
+        "snippet": "hapless object within reach. No perceptible face or front did it have; no concei"
+      },
+      {
+        "fraction": 0.9,
+        "full_range_cfi": "epubcfi(/6/22!/4/392,/1:135,/1:934)",
+        "collapsed_start_cfi": "epubcfi(/6/22!/4/392/1:135)",
+        "snippet": "that goes before the dawn, was sailing by a cluster of rocky islets; the watch\u2014t"
+      }
+    ],
+    "reverse_resolutions": [
+      {
+        "kind": "dom_10%",
+        "cfi": "epubcfi(/6/6!/4/14/1:800)",
+        "resolved_section": 2,
+        "source_snippet": "le ship, and bear a hardy helm; for lo! the sun is breaking through; the clouds ",
+        "resolved_dom_snippet": "le ship, and bear a hardy helm; for lo! the sun is breaking through; the clouds ",
+        "resolved_paginator_snippet": "ship,\u201d the angel seemed to say, \u201cbeat on, beat on, thou noble ship, and bear a h",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_50%",
+        "cfi": "epubcfi(/6/14!/4/106/1:264)",
+        "resolved_section": 6,
+        "source_snippet": "beheld, that though one and all of them declare it to be the largest animated th",
+        "resolved_dom_snippet": "beheld, that though one and all of them declare it to be the largest animated th",
+        "resolved_paginator_snippet": "Whatever superstitions the sperm whalemen in general have connected with the sig",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_90%",
+        "cfi": "epubcfi(/6/22!/4/398/1:599)",
+        "resolved_section": 10,
+        "source_snippet": "g down, a little tossed heap of white bubbles in the blue of the sea. The life-b",
+        "resolved_dom_snippet": "g down, a little tossed heap of white bubbles in the blue of the sea. The life-b",
+        "resolved_paginator_snippet": "peeringly uprising from the water alongside. In the sea, under certain circumsta",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_ch_1",
+        "cfi": "epubcfi(/6/4!/4/6[pgepubid00000])",
+        "resolved_section": 1,
+        "source_snippet": "MOBY-DICK; or, THE WHALE. By Herman Melville",
+        "resolved_dom_snippet": "MOBY-DICK; or, THE WHALE. By Herman Melville",
+        "resolved_paginator_snippet": "MOBY-DICK; or, THE WHALE.",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_2",
+        "cfi": "epubcfi(/6/4!/4/26/6[pgepubid00001])",
+        "resolved_section": 1,
+        "source_snippet": "ETYMOLOGY. (Supplied by a Late Consumptive Usher to a Grammar School.) The pale ",
+        "resolved_dom_snippet": "ETYMOLOGY. (Supplied by a Late Consumptive Usher to a Grammar School.) The pale ",
+        "resolved_paginator_snippet": "ETYMOLOGY. (Supplied by a Late Consumptive Usher to a Grammar School.) The pale ",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_3",
+        "cfi": "epubcfi(/6/4!/4/26/8[pgepubid00002])",
+        "resolved_section": 1,
+        "source_snippet": "(Supplied by a Late Consumptive Usher to a Grammar School.) The pale Usher\u2014threa",
+        "resolved_dom_snippet": "(Supplied by a Late Consumptive Usher to a Grammar School.) The pale Usher\u2014threa",
+        "resolved_paginator_snippet": "ETYMOLOGY. (Supplied by a Late Consumptive Usher to a Grammar School.) The pale ",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_4",
+        "cfi": "epubcfi(/6/4!/4/26/24[pgepubid00003])",
+        "resolved_section": 1,
+        "source_snippet": "EXTRACTS. (Supplied by a Sub-Sub-Librarian). It will be seen that this mere pain",
+        "resolved_dom_snippet": "EXTRACTS. (Supplied by a Sub-Sub-Librarian). It will be seen that this mere pain",
+        "resolved_paginator_snippet": "EXTRACTS. (Supplied by a Sub-Sub-Librarian). It will be seen that this mere pain",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_5",
+        "cfi": "epubcfi(/6/4!/4/26/30[pgepubid00004])",
+        "resolved_section": 1,
+        "source_snippet": "EXTRACTS. \u201cAnd God created great whales.\u201d \u2014Genesis. \u201cLeviathan maketh a path to ",
+        "resolved_dom_snippet": "EXTRACTS. \u201cAnd God created great whales.\u201d \u2014Genesis. \u201cLeviathan maketh a path to ",
+        "resolved_paginator_snippet": "thankless! Would that I could clear out Hampton Court and the Tuileries for ye! ",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "pag_10%_collapsed",
+        "cfi": "epubcfi(/6/6!/4/12/1:674)",
+        "resolved_section": 2,
+        "source_snippet": "stronghold\u2014a lofty Ehrenbreitstein, with a perennial well of water within the wa",
+        "resolved_dom_snippet": "stronghold\u2014a lofty Ehrenbreitstein, with a perennial well of water within the wa",
+        "resolved_paginator_snippet": "and stooping over the pulpit, deliberately drag up the ladder step by step, till",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "pag_50%_collapsed",
+        "cfi": "epubcfi(/6/14!/4/96/1:707)",
+        "resolved_section": 6,
+        "source_snippet": "hapless object within reach. No perceptible face or front did it have; no concei",
+        "resolved_dom_snippet": "hapless object within reach. No perceptible face or front did it have; no concei",
+        "resolved_paginator_snippet": "hapless object within reach. No perceptible face or front did it have; no concei",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "pag_90%_collapsed",
+        "cfi": "epubcfi(/6/22!/4/392/1:135)",
+        "resolved_section": 10,
+        "source_snippet": "that goes before the dawn, was sailing by a cluster of rocky islets; the watch\u2014t",
+        "resolved_dom_snippet": "that goes before the dawn, was sailing by a cluster of rocky islets; the watch\u2014t",
+        "resolved_paginator_snippet": "that goes before the dawn, was sailing by a cluster of rocky islets; the watch\u2014t",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      }
+    ]
+  },
+  "pride-and-prejudice-pg1342.epub": {
+    "epub": "pride-and-prejudice-pg1342.epub",
+    "platform": "android",
+    "user_agent": "Mozilla/5.0 (Linux; Android 15; SM-S918B Build/AP3A.240905.015.A2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/157.0.8103.40 Mobile Safari/537.36",
+    "elapsed_ms": 2146.7,
+    "spine_sections": 9,
+    "toc_entries_total": 63,
+    "dom_chapters": [
+      {
+        "label": "PRIDE. and PREJUDICE",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00002",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/16/4[pgepubid00002])",
+        "snippet": "PRIDE. and PREJUDICE by Jane Austen, with a Preface by George Saintsbury and Ill"
+      },
+      {
+        "label": "Chapter I.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00022",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/62[pgepubid00022])",
+        "snippet": "Chapter I. IT is a truth universally acknowledged, that a single man in possessi"
+      },
+      {
+        "label": "I hope Mr. Bingley will like it. CHAPTER II.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00028",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/138[pgepubid00028])",
+        "snippet": "I hope Mr. Bingley will like it. CHAPTER II. R. BENNET was among the earliest of"
+      },
+      {
+        "label": "He rode a black horse. CHAPTER III.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00033",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/196[pgepubid00033])",
+        "snippet": "He rode a black horse. CHAPTER III. OT all that Mrs. Bennet, however, with the a"
+      },
+      {
+        "label": "CHAPTER IV.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00041",
+        "section_index": 1,
+        "cfi": "epubcfi(/6/4!/4/244[pgepubid00041])",
+        "snippet": "CHAPTER IV. HEN Jane and Elizabeth were alone, the former, who had been cautious"
+      }
+    ],
+    "dom_fractions": [
+      {
+        "fraction": 0.1,
+        "section_index": 1,
+        "fraction_in_section": 0.552993,
+        "total_chars_in_section": 115834,
+        "target_char": 64055,
+        "cfi": "epubcfi(/6/4!/4/352/1:389)",
+        "snippet": "ot advance their felicity in the least. They always continue to grow sufficientl"
+      },
+      {
+        "fraction": 0.5,
+        "section_index": 4,
+        "fraction_in_section": 0.078881,
+        "total_chars_in_section": 142359,
+        "target_char": 11229,
+        "cfi": "epubcfi(/6/10!/4/92/1:241)",
+        "snippet": "age. There, shut into her own room, as soon as their visitor left them, she coul"
+      },
+      {
+        "fraction": 0.9,
+        "section_index": 6,
+        "fraction_in_section": 0.311019,
+        "total_chars_in_section": 82547,
+        "target_char": 25673,
+        "cfi": "epubcfi(/6/14!/4/256/1:150)",
+        "snippet": "r recede. I shall not go away till you have given me the assurance I require.\u201d \u201c"
+      }
+    ],
+    "paginator_chapters": [
+      {
+        "label": "PRIDE. and PREJUDICE",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00002",
+        "full_range_cfi": "epubcfi(/6/4!/4/16,/2[pgepubid00001],/4[pgepubid00002]/6)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/16/2[pgepubid00001])",
+        "snippet": ""
+      },
+      {
+        "label": "Chapter I.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00022",
+        "full_range_cfi": "epubcfi(/6/4!/4/62[pgepubid00022],,/9:11)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/62[pgepubid00022])",
+        "snippet": "Chapter I."
+      },
+      {
+        "label": "I hope Mr. Bingley will like it. CHAPTER II.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00028",
+        "full_range_cfi": "epubcfi(/6/4!/4,/138[pgepubid00028],/140/3:150)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/138[pgepubid00028])",
+        "snippet": "I hope Mr. Bingley will like it. CHAPTER II. R. BENNET was among the earliest of"
+      },
+      {
+        "label": "He rode a black horse. CHAPTER III.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00033",
+        "full_range_cfi": "epubcfi(/6/4!/4/196[pgepubid00033],/2[CHAPTER_III],/12)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/196[pgepubid00033]/2[CHAPTER_III])",
+        "snippet": "He rode a black horse."
+      },
+      {
+        "label": "CHAPTER IV.",
+        "href": "OEBPS/909196632077550380_1342-h-0.htm.xhtml#pgepubid00041",
+        "full_range_cfi": "epubcfi(/6/4!/4,/244[pgepubid00041],/248/1:113)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/244[pgepubid00041])",
+        "snippet": "CHAPTER IV. HEN Jane and Elizabeth were alone, the former, who had been cautious"
+      }
+    ],
+    "paginator_fractions": [
+      {
+        "fraction": 0.1,
+        "full_range_cfi": "epubcfi(/6/4!/4/334,/5:51,/9:378)",
+        "collapsed_start_cfi": "epubcfi(/6/4!/4/334/5:51)",
+        "snippet": "attention was received with the greatest pleasure; but Elizabeth still saw super"
+      },
+      {
+        "fraction": 0.5,
+        "full_range_cfi": "epubcfi(/6/10!/4,/84,/90/1:121)",
+        "collapsed_start_cfi": "epubcfi(/6/10!/4/84)",
+        "snippet": "\u201cI am thinking of what you have been telling me,\u201d said she. \u201cYour cousin\u2019s condu"
+      },
+      {
+        "fraction": 0.9,
+        "full_range_cfi": "epubcfi(/6/14!/4,/240,/254/1:37)",
+        "collapsed_start_cfi": "epubcfi(/6/14!/4/240)",
+        "snippet": "\u201cTrue. You are a gentleman\u2019s daughter. But what was your mother? Who are your un"
+      }
+    ],
+    "reverse_resolutions": [
+      {
+        "kind": "dom_10%",
+        "cfi": "epubcfi(/6/4!/4/352/1:389)",
+        "resolved_section": 1,
+        "source_snippet": "ot advance their felicity in the least. They always continue to grow sufficientl",
+        "resolved_dom_snippet": "ot advance their felicity in the least. They always continue to grow sufficientl",
+        "resolved_paginator_snippet": "his character for a twelvemonth. Happiness in marriage is entirely a matter of c",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_50%",
+        "cfi": "epubcfi(/6/10!/4/92/1:241)",
+        "resolved_section": 4,
+        "source_snippet": "age. There, shut into her own room, as soon as their visitor left them, she coul",
+        "resolved_dom_snippet": "age. There, shut into her own room, as soon as their visitor left them, she coul",
+        "resolved_paginator_snippet": "This was spoken jestingly, but it appeared to her so just a picture of Mr. Darcy",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_90%",
+        "cfi": "epubcfi(/6/14!/4/256/1:150)",
+        "resolved_section": 6,
+        "source_snippet": "r recede. I shall not go away till you have given me the assurance I require.\u201d \u201c",
+        "resolved_dom_snippet": "r recede. I shall not go away till you have given me the assurance I require.\u201d \u201c",
+        "resolved_paginator_snippet": "\u201cMiss Bennet, I am shocked and astonished. I expected to find a more reasonable ",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "dom_ch_1",
+        "cfi": "epubcfi(/6/4!/4/16/4[pgepubid00002])",
+        "resolved_section": 1,
+        "source_snippet": "PRIDE. and PREJUDICE by Jane Austen, with a Preface by George Saintsbury and Ill",
+        "resolved_dom_snippet": "PRIDE. and PREJUDICE by Jane Austen, with a Preface by George Saintsbury and Ill",
+        "resolved_paginator_snippet": "",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_2",
+        "cfi": "epubcfi(/6/4!/4/62[pgepubid00022])",
+        "resolved_section": 1,
+        "source_snippet": "Chapter I. IT is a truth universally acknowledged, that a single man in possessi",
+        "resolved_dom_snippet": "Chapter I. IT is a truth universally acknowledged, that a single man in possessi",
+        "resolved_paginator_snippet": "Chapter I.",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_3",
+        "cfi": "epubcfi(/6/4!/4/138[pgepubid00028])",
+        "resolved_section": 1,
+        "source_snippet": "I hope Mr. Bingley will like it. CHAPTER II. R. BENNET was among the earliest of",
+        "resolved_dom_snippet": "I hope Mr. Bingley will like it. CHAPTER II. R. BENNET was among the earliest of",
+        "resolved_paginator_snippet": "I hope Mr. Bingley will like it. CHAPTER II. R. BENNET was among the earliest of",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_4",
+        "cfi": "epubcfi(/6/4!/4/196[pgepubid00033])",
+        "resolved_section": 1,
+        "source_snippet": "He rode a black horse. CHAPTER III. OT all that Mrs. Bennet, however, with the a",
+        "resolved_dom_snippet": "He rode a black horse. CHAPTER III. OT all that Mrs. Bennet, however, with the a",
+        "resolved_paginator_snippet": "He rode a black horse.",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "dom_ch_5",
+        "cfi": "epubcfi(/6/4!/4/244[pgepubid00041])",
+        "resolved_section": 1,
+        "source_snippet": "CHAPTER IV. HEN Jane and Elizabeth were alone, the former, who had been cautious",
+        "resolved_dom_snippet": "CHAPTER IV. HEN Jane and Elizabeth were alone, the former, who had been cautious",
+        "resolved_paginator_snippet": "CHAPTER IV. HEN Jane and Elizabeth were alone, the former, who had been cautious",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "pag_10%_collapsed",
+        "cfi": "epubcfi(/6/4!/4/334/5:51)",
+        "resolved_section": 1,
+        "source_snippet": "attention was received with the greatest pleasure; but Elizabeth still saw super",
+        "resolved_dom_snippet": "attention was received with the greatest pleasure; but Elizabeth still saw super",
+        "resolved_paginator_snippet": "CHAPTER VI. HE ladies of Longbourn soon waited on those of Netherfield. The visi",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": false
+      },
+      {
+        "kind": "pag_50%_collapsed",
+        "cfi": "epubcfi(/6/10!/4/84)",
+        "resolved_section": 4,
+        "source_snippet": "\u201cI am thinking of what you have been telling me,\u201d said she. \u201cYour cousin\u2019s condu",
+        "resolved_dom_snippet": "\u201cI am thinking of what you have been telling me,\u201d said she. \u201cYour cousin\u2019s condu",
+        "resolved_paginator_snippet": "\u201cI am thinking of what you have been telling me,\u201d said she. \u201cYour cousin\u2019s condu",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      },
+      {
+        "kind": "pag_90%_collapsed",
+        "cfi": "epubcfi(/6/14!/4/240)",
+        "resolved_section": 6,
+        "source_snippet": "\u201cTrue. You are a gentleman\u2019s daughter. But what was your mother? Who are your un",
+        "resolved_dom_snippet": "\u201cTrue. You are a gentleman\u2019s daughter. But what was your mother? Who are your un",
+        "resolved_paginator_snippet": "\u201cTrue. You are a gentleman\u2019s daughter. But what was your mother? Who are your un",
+        "exact_dom_snippet_match": true,
+        "paginator_contains_prefix": true
+      }
+    ]
+  }
+}
