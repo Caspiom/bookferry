@@ -41,6 +41,8 @@ BOOKFERRY_SCREENSHOTS_DIR="$SCREENSHOTS_DIR" \
 BOOKFERRY_E2E_OUT="$REPORT_FILE" \
 WEBKIT_DISABLE_COMPOSITING_MODE=1 \
 NO_AT_BRIDGE=1 \
+GDK_BACKEND=x11 \
+WAYLAND_DISPLAY= \
 timeout 80s xvfb-run -a -s "-screen 0 1280x800x24" \
   "$REPO_ROOT/target/debug/bookferry" >"$LOG_FILE" 2>&1 || {
     echo "ERRO: Execução E2E falhou ou expirou. Log completo:"

@@ -8,6 +8,15 @@ import {
   applyPresetToPrefs,
   buildEpubCss,
   buildFolderView,
+  computeSingleSpreads,
+  computeSpreadLayout,
+  computeSpreads,
+  initialPan,
+  nextDoubleTapScale,
+  panLimits,
+  resolveSpreadMode,
+  spreadIndexForPage,
+  zoomTranslateForPoint,
   computePagePercent,
   createDebouncer,
   deriveCoverStyle,
@@ -475,5 +484,137 @@ describe('Zonas de toque e teclado', () => {
     assert.equal(resolveKeyAction({ key: '=', ctrlKey: true }), 'font-inc');
     assert.equal(resolveKeyAction({ key: 'a' }), null);
     assert.equal(resolveKeyAction({ key: 'ArrowRight', altKey: true }), null);
+  });
+});
+
+describe('Quadrinhos: spreads (computeSpreads)', () => {
+  const P = { w: 100, h: 150 };
+  const W = { w: 300, h: 150 };
+
+  it('capa sozinha e o resto em pares; sobra fica sozinha', () => {
+    const sp = computeSpreads([P, P, P, P, P, P]);
+    assert.deepEqual(sp.map((s) => s.pages), [[0], [1, 2], [3, 4], [5]]);
+    assert.deepEqual(sp.map((s) => s.display), [[0], [1, 2], [3, 4], [5]]);
+  });
+
+  it('RTL inverte só a ordem de exibição (menor índice à direita)', () => {
+    const sp = computeSpreads([P, P, P, P], { direction: 'rtl' });
+    assert.deepEqual(sp.map((s) => s.pages), [[0], [1, 2], [3]]);
+    assert.deepEqual(sp.map((s) => s.display), [[0], [2, 1], [3]]);
+  });
+
+  it('sem "capa sozinha" pareia desde a primeira página', () => {
+    const sp = computeSpreads([P, P, P, P, P, P], { coverAlone: false });
+    assert.deepEqual(sp.map((s) => s.pages), [[0, 1], [2, 3], [4, 5]]);
+  });
+
+  it('página larga fica sozinha e muda o pareamento seguinte', () => {
+    const sp = computeSpreads([P, P, P, W, P, P]);
+    assert.deepEqual(sp.map((s) => s.pages), [[0], [1, 2], [3], [4, 5]]);
+    assert.equal(sp[2].wide, true);
+    // Página seguida de uma larga não pareia com ela.
+    const sp2 = computeSpreads([P, P, W, P]);
+    assert.deepEqual(sp2.map((s) => s.pages), [[0], [1], [2], [3]]);
+  });
+
+  it('dimensão desconhecida conta como retrato; entradas vazias não quebram', () => {
+    assert.deepEqual(computeSpreads([null, undefined, null]).map((s) => s.pages), [[0], [1, 2]]);
+    assert.deepEqual(computeSpreads([]), []);
+    assert.deepEqual(computeSpreads(null), []);
+  });
+
+  it('toda página aparece exatamente uma vez, em ordem', () => {
+    const dims = [P, W, P, P, P, W, W, P, P];
+    for (const direction of ['ltr', 'rtl']) {
+      for (const coverAlone of [true, false]) {
+        const flat = computeSpreads(dims, { coverAlone, direction }).flatMap((s) => s.pages);
+        assert.deepEqual(flat, dims.map((_, i) => i));
+      }
+    }
+  });
+
+  it('spreadIndexForPage encontra o spread e faz clamp', () => {
+    const sp = computeSpreads([P, P, P, P, P, P]);
+    assert.equal(spreadIndexForPage(sp, 0), 0);
+    assert.equal(spreadIndexForPage(sp, 2), 1);
+    assert.equal(spreadIndexForPage(sp, 3), 2);
+    assert.equal(spreadIndexForPage(sp, 99), 3);
+    assert.equal(spreadIndexForPage(sp, -4), 0);
+    assert.equal(spreadIndexForPage([], 5), 0);
+  });
+
+  it('computeSingleSpreads: uma página por spread', () => {
+    assert.deepEqual(computeSingleSpreads(3).map((s) => s.pages), [[0], [1], [2]]);
+    assert.deepEqual(computeSingleSpreads(0), []);
+    assert.deepEqual(computeSingleSpreads(-2), []);
+  });
+});
+
+describe('Quadrinhos: modo, layout, pan e zoom', () => {
+  it('resolveSpreadMode: auto só em janela larga', () => {
+    assert.equal(resolveSpreadMode('double', 100, 1000), 'double');
+    assert.equal(resolveSpreadMode('single', 1600, 900), 'single');
+    assert.equal(resolveSpreadMode('xyz', 1600, 900), 'single');
+    assert.equal(resolveSpreadMode('auto', 1600, 900), 'double');
+    assert.equal(resolveSpreadMode('auto', 900, 1600), 'single');
+    assert.equal(resolveSpreadMode('auto', 0, 0), 'single');
+    // Janela quase quadrada não vira duas páginas, mesmo com páginas bem estreitas.
+    assert.equal(resolveSpreadMode('auto', 1000, 1000, [{ w: 40, h: 100 }]), 'single');
+    // Páginas largas na amostra são ignoradas no cálculo da proporção típica.
+    assert.equal(resolveSpreadMode('auto', 1600, 900, [{ w: 300, h: 100 }]), 'double');
+  });
+
+  it('computeSpreadLayout: encaixes página/largura/altura/original', () => {
+    const one = [{ w: 100, h: 200 }];
+    const stage = { w: 400, h: 400 };
+    const page = computeSpreadLayout(one, stage, 'page');
+    assert.deepEqual([page.contentW, page.contentH, page.scale], [200, 400, 2]);
+    const width = computeSpreadLayout(one, stage, 'width');
+    assert.deepEqual([width.contentW, width.contentH], [400, 800]);
+    const height = computeSpreadLayout(one, stage, 'height');
+    assert.deepEqual([height.contentW, height.contentH], [200, 400]);
+    const orig = computeSpreadLayout(one, stage, 'original');
+    assert.deepEqual([orig.contentW, orig.contentH], [100, 200]);
+  });
+
+  it('computeSpreadLayout: duas páginas dividem a largura e alturas diferentes se normalizam', () => {
+    const two = computeSpreadLayout([{ w: 100, h: 200 }, { w: 100, h: 200 }], { w: 400, h: 400 }, 'page');
+    assert.deepEqual([two.contentW, two.contentH], [400, 400]);
+    assert.deepEqual(two.pages, [{ w: 200, h: 400 }, { w: 200, h: 400 }]);
+    const mixed = computeSpreadLayout([{ w: 100, h: 200 }, { w: 100, h: 100 }], { w: 600, h: 400 }, 'page');
+    // a segunda página é normalizada para a altura da maior (200): 200x200
+    assert.equal(mixed.pages[0].h, mixed.pages[1].h);
+    assert.equal(mixed.pages[1].w, mixed.pages[0].w * 2);
+    const empty = computeSpreadLayout([], { w: 300, h: 200 });
+    assert.deepEqual([empty.contentW, empty.contentH, empty.pages.length], [300, 200, 0]);
+  });
+
+  it('panLimits e initialPan: zero quando cabe; LTR começa à esquerda, RTL à direita', () => {
+    assert.deepEqual(panLimits(1000, 800, 500, 500), { limX: 250, limY: 150 });
+    assert.deepEqual(panLimits(300, 300, 500, 500), { limX: 0, limY: 0 });
+    assert.deepEqual(initialPan(1000, 800, 500, 500, 'ltr'), { tx: 250, ty: 150 });
+    assert.deepEqual(initialPan(1000, 800, 500, 500, 'rtl'), { tx: -250, ty: 150 });
+    assert.deepEqual(initialPan(300, 300, 500, 500, 'ltr'), { tx: 0, ty: 0 });
+  });
+
+  it('nextDoubleTapScale alterna ampliar/voltar', () => {
+    assert.equal(nextDoubleTapScale(1), 2.5);
+    assert.equal(nextDoubleTapScale(1.05), 2.5);
+    assert.equal(nextDoubleTapScale(1.06), 1);
+    assert.equal(nextDoubleTapScale(2.5), 1);
+    assert.equal(nextDoubleTapScale(1, 3), 3);
+  });
+
+  it('zoomTranslateForPoint centraliza o ponto tocado, respeitando as bordas', () => {
+    const base = { stageW: 1000, stageH: 800, contentW: 1000, contentH: 800, fromScale: 1, toScale: 2.5 };
+    const center = zoomTranslateForPoint({ ...base, px: 500, py: 400 });
+    assert.equal(center.tx + 0, 0);
+    assert.equal(center.ty + 0, 0);
+    // toque à direita: conteúdo desloca para a esquerda, mas nunca além do limite (750)
+    assert.equal(zoomTranslateForPoint({ ...base, px: 1000, py: 400 }).tx, -750);
+    assert.equal(zoomTranslateForPoint({ ...base, px: 600, py: 400 }).tx, -250);
+    assert.equal(zoomTranslateForPoint({ ...base, px: 0, py: 0 }).tx, 750);
+    assert.equal(zoomTranslateForPoint({ ...base, px: 0, py: 0 }).ty, 600);
+    assert.deepEqual(zoomTranslateForPoint({ ...base, px: 900, py: 100, toScale: 1 }), { tx: 0, ty: 0 });
   });
 });

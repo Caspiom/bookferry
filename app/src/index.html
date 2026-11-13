@@ -223,6 +223,46 @@
             </button>
           </div>
 
+          <!-- Controles exclusivos de quadrinhos (CBZ): direção, páginas, margens, capa -->
+          <div id="reader-comic-controls" class="control-group hidden">
+            <button
+              id="btn-comic-direction"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Direção de leitura"
+              title="Direção de leitura (mangá = da direita para a esquerda)"
+            >
+              Leitura: →
+            </button>
+            <button
+              id="btn-comic-spread"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Páginas por tela"
+              title="Uma página, duas páginas lado a lado ou automático (duas só em tela larga)"
+            >
+              Páginas: 1
+            </button>
+            <button
+              id="btn-comic-cover"
+              type="button"
+              class="btn btn-secondary hidden"
+              aria-label="Capa sozinha"
+              title="No modo de duas páginas, a capa fica sozinha ou pareada com a página 2"
+            >
+              Capa: sozinha
+            </button>
+            <button
+              id="btn-comic-margin"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Margens"
+              title="Sem margens: a página ocupa toda a área da tela"
+            >
+              Margens: sim
+            </button>
+          </div>
+
           <!-- Controles de PDF e CBZ (zoom e encaixe) -->
           <div id="reader-zoom-controls" class="control-group hidden">
             <button

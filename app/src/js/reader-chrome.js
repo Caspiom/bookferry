@@ -31,15 +31,22 @@ export function createReaderChrome({ api, getReader, getAaPanel, closeReader, is
   }
 
   function setImmersive(on) {
-    immersive = Boolean(on);
-    screen()?.classList.toggle('immersive', immersive);
-    if (immersive) {
-      getAaPanel()?.close?.();
-      document.getElementById('toc-drawer')?.classList.add('hidden');
-    }
-    try {
-      nativeBridge()?.setImmersive?.(immersive);
-    } catch (_) {}
+    const next = Boolean(on);
+    const apply = () => {
+      immersive = next;
+      screen()?.classList.toggle('immersive', immersive);
+      if (immersive) {
+        getAaPanel()?.close?.();
+        document.getElementById('toc-drawer')?.classList.add('hidden');
+      }
+      try {
+        nativeBridge()?.setImmersive?.(immersive);
+      } catch (_) {}
+    };
+    // O EPUB reflui ao mudar a altura da área de leitura: mantém o ponto de leitura.
+    const reader = getReader();
+    if (reader?.keepPositionDuring && next !== immersive) reader.keepPositionDuring(apply);
+    else apply();
   }
 
   async function setFullscreen(on) {

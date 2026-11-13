@@ -269,6 +269,24 @@ export async function mountEpubReader({
         applying = false;
       }
     },
+    /**
+     * Executa uma ação que redimensiona a área de leitura (ex.: esconder a toolbar no modo
+     * imersivo) e devolve o leitor ao mesmo ponto: o reflow do paginator pode cair numa página
+     * vizinha, e a posição salva não pode andar por causa disso.
+     */
+    async keepPositionDuring(action) {
+      const anchor = currentLocator;
+      restyling = true;
+      if (restyleTimer) clearTimeout(restyleTimer);
+      action();
+      await new Promise((resolve) => setTimeout(resolve, 350)); // deixa o ResizeObserver refluir
+      if (isEpubCfi(anchor)) {
+        try {
+          await view.goTo(anchor);
+        } catch (_) {}
+      }
+      restyling = false;
+    },
     /** Seek explícito pela barra de progresso (a posição salva continua sendo o CFI do relocate). */
     async seekFraction(fraction) {
       const f = Math.max(0, Math.min(1, Number(fraction) || 0));

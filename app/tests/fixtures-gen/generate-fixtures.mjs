@@ -356,7 +356,8 @@ function generateSyntheticCbz6Pages() {
     },
     {
       name: 'page5.png',
-      data: generateColoredPng(360, 480, palettes[4].bg, palettes[4].fg, 5),
+      // Página 5 é uma folha dupla (paisagem): o modo de duas páginas deve deixá-la sozinha.
+      data: generateColoredPng(720, 480, palettes[4].bg, palettes[4].fg, 5),
     },
   ];
 

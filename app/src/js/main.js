@@ -138,10 +138,45 @@ async function saveReaderPosition(bookId, locator, percent, snippet) {
   }
 }
 
+let comicPrefsTimer = null;
+
+/** Salva por livro (debounce) as preferências de quadrinhos mudadas pela toolbar. */
+function saveComicPrefs(bookId, prefs) {
+  if (comicPrefsTimer) clearTimeout(comicPrefsTimer);
+  comicPrefsTimer = setTimeout(() => {
+    comicPrefsTimer = null;
+    api.saveReaderPrefs(bookId, prefs).catch(() => {});
+  }, 400);
+}
+
+const FIT_LABELS = { page: 'Página', width: 'Largura', height: 'Altura' };
+const SPREAD_LABELS = { single: '1', double: '2', auto: 'Auto' };
+
+/** Atualiza os rótulos dos botões de quadrinhos conforme as preferências do leitor ativo. */
+function refreshComicButtons() {
+  const reader = appState.activeReader;
+  if (reader?.format !== 'cbz') return;
+  const p = reader.getPrefs();
+  const set = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  set('btn-comic-direction', p.direction === 'rtl' ? 'Leitura: ←' : 'Leitura: →');
+  set('btn-comic-spread', `Páginas: ${SPREAD_LABELS[p.spread_mode] || '1'}`);
+  set('btn-comic-cover', p.cover_alone ? 'Capa: sozinha' : 'Capa: pareada');
+  set('btn-comic-margin', p.zero_margin ? 'Margens: não' : 'Margens: sim');
+  set('btn-fit-toggle', `Ajustar: ${FIT_LABELS[p.fit] || 'Página'}`);
+  // "Capa" só faz sentido quando há duas páginas na tela.
+  document
+    .getElementById('btn-comic-cover')
+    ?.classList.toggle('hidden', p.spread_mode === 'single');
+}
+
 function updateReaderToolbarForFormat(format) {
   const isEpub = format === 'epub';
   document.getElementById('reader-epub-controls')?.classList.toggle('hidden', !isEpub);
   document.getElementById('reader-zoom-controls')?.classList.toggle('hidden', isEpub);
+  document.getElementById('reader-comic-controls')?.classList.toggle('hidden', format !== 'cbz');
   document.getElementById('btn-reader-toc')?.classList.toggle('hidden', !isEpub);
 }
 
@@ -223,11 +258,19 @@ export async function openBookFlow(book) {
       appState.activeReader = await mountCbzReader({
         book: readyBook,
         initialPosition,
+        prefs: prefsView?.prefs,
         viewportEl,
         statusLabelEl,
         onSavePosition: saveReaderPosition,
-        hooks,
+        hooks: {
+          ...hooks,
+          onPrefsChange: (p) => {
+            refreshComicButtons();
+            saveComicPrefs(readyBook.book_id, p);
+          },
+        },
       });
+      refreshComicButtons();
     } else {
       throw new Error(`Formato não suportado: ${readyBook.format}`);
     }
@@ -398,9 +441,18 @@ function setupEventListeners() {
   document.getElementById('btn-fit-toggle')?.addEventListener('click', (ev) => {
     const mode = appState.activeReader?.toggleFitMode?.();
     if (mode && ev.currentTarget) {
-      ev.currentTarget.textContent = mode === 'width' ? 'Ajustar: Largura' : 'Ajustar: Página';
+      ev.currentTarget.textContent = `Ajustar: ${FIT_LABELS[mode] || 'Página'}`;
     }
   });
+  const comicAction = (id, method) =>
+    document.getElementById(id)?.addEventListener('click', () => {
+      appState.activeReader?.[method]?.();
+      refreshComicButtons();
+    });
+  comicAction('btn-comic-direction', 'toggleDirection');
+  comicAction('btn-comic-spread', 'cycleSpreadMode');
+  comicAction('btn-comic-cover', 'toggleCoverAlone');
+  comicAction('btn-comic-margin', 'toggleZeroMargin');
   document.getElementById('btn-reader-toc')?.addEventListener('click', () => {
     document.getElementById('toc-drawer')?.classList.toggle('hidden');
   });
@@ -770,6 +822,7 @@ async function runE2eAutomation() {
           new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: 100, view: doc.defaultView }),
         );
       };
+      await sleep(800); // deixa o layout do EPUB assentar antes de fixar o ponto de leitura
       const anchor = reader().getCurrentState().locator;
       im.toolbar_before = toolbarShown();
 
@@ -777,7 +830,8 @@ async function runE2eAutomation() {
       await sleep(600); // toque simples espera o possível segundo toque (220 ms)
       im.immersive_after_center_tap = screenEl.classList.contains('immersive');
       im.toolbar_in_immersive = toolbarShown();
-      await sleep(900);
+      // O reflow do EPUB acontece depois do ResizeObserver; espera o ponto de leitura reaparecer.
+      await sleep(1200);
       im.anchor_visible_in_immersive = reader().anchorIsVisible(anchor);
       results.screenshots.push(await api.e2eCaptureScreenshot('12-epub-immersive'));
 
@@ -785,6 +839,7 @@ async function runE2eAutomation() {
       await sleep(600);
       im.immersive_after_second_tap = screenEl.classList.contains('immersive');
       im.toolbar_after_second_tap = toolbarShown();
+      await sleep(1200); // o EPUB refluiu e o ponto de leitura foi restaurado
 
       // Zona lateral direita vira a página; esquerda volta.
       const before = reader().getCurrentState();
@@ -804,6 +859,7 @@ async function runE2eAutomation() {
       await sleep(200);
       im.immersive_after_esc = screenEl.classList.contains('immersive');
       im.reader_open_after_esc = Boolean(reader());
+      await sleep(1200); // reflow do EPUB ao sair do imersivo
       const b2 = reader().getCurrentState().locator;
       key('ArrowRight');
       await sleep(1500);
@@ -925,6 +981,109 @@ async function runE2eAutomation() {
       if (t.after_right_tap !== 'Pág. 3 / 6' || t.after_left_tap !== 'Pág. 2 / 6') {
         throw new Error(`CBZ zonas de toque: ${JSON.stringify(t)}`);
       }
+    }
+
+    // 4b. Quadrinhos: direção RTL, duas páginas, folha larga, zoom por toque duplo, sem margens
+    {
+      const reader = appState.activeReader;
+      const stage = document.querySelector('.cbz-stage');
+      const label = document.getElementById('reader-status-label');
+      const target = () => document.querySelector('.cbz-target');
+      const tapAt = (frac, count = 1) => {
+        const r = stage.getBoundingClientRect();
+        const opts = { bubbles: true, clientX: r.left + r.width * frac, clientY: r.top + r.height / 2, pointerId: 11 };
+        for (let i = 0; i < count; i += 1) {
+          stage.dispatchEvent(new PointerEvent('pointerdown', opts));
+          stage.dispatchEvent(new PointerEvent('pointerup', opts));
+        }
+      };
+      const c = {};
+
+      // RTL: toque na direita VOLTA a página, na esquerda AVANÇA; o estado é salvo por livro.
+      c.dir_default = reader.getPrefs().direction;
+      reader.toggleDirection();
+      await sleep(300);
+      tapAt(0.9);
+      await sleep(700);
+      c.rtl_right_tap = label.textContent;
+      tapAt(0.1);
+      await sleep(700);
+      c.rtl_left_tap = label.textContent;
+      await sleep(800);
+      c.rtl_saved = (await api.getReaderPrefs(appState.activeBook.book_id)).prefs.direction;
+      reader.toggleDirection();
+      await sleep(300);
+
+      // Toque duplo: amplia (2,5x) e volta; não vira página.
+      tapAt(0.5, 2);
+      await sleep(500);
+      c.zoom_after_double = target().style.transform;
+      c.label_after_double = label.textContent;
+      tapAt(0.5, 2);
+      await sleep(500);
+      c.zoom_after_second_double = target().style.transform;
+
+      // Duas páginas: capa sozinha, par 2–3, folha larga (5) sozinha.
+      reader.cycleSpreadMode();
+      await sleep(2000); // o pareamento espera as dimensões de todas as páginas
+      c.spread_mode = reader.getPrefs().spread_mode;
+      await reader.seekPage(1);
+      await sleep(600);
+      const seq = [label.textContent];
+      for (let i = 0; i < 4; i += 1) {
+        await reader.next();
+        await sleep(600);
+        seq.push(label.textContent);
+      }
+      c.double_sequence = seq;
+      await reader.seekPage(2);
+      await sleep(600);
+      const ltrAlts = [...target().querySelectorAll('img')].map((im) => im.alt);
+      reader.toggleDirection();
+      await sleep(700);
+      const rtlAlts = [...target().querySelectorAll('img')].map((im) => im.alt);
+      c.alts_ltr = ltrAlts;
+      c.alts_rtl = rtlAlts;
+      results.screenshots.push(await api.e2eCaptureScreenshot('13-cbz-double-rtl'));
+      reader.toggleDirection();
+      await sleep(300);
+
+      // Automático em janela larga resolve para duas páginas; margens zero aumentam a página.
+      reader.cycleSpreadMode();
+      await sleep(500);
+      c.auto_effective = reader.getEffectiveSpreadMode();
+      c.auto_mode_pref = reader.getPrefs().spread_mode;
+      c.stage_px = `${Math.round(stage.getBoundingClientRect().width)}x${Math.round(stage.getBoundingClientRect().height)}`;
+      reader.cycleSpreadMode(); // volta para uma página
+      await sleep(500);
+      c.single_again = reader.getEffectiveSpreadMode();
+      const hBefore = target().getBoundingClientRect().height;
+      reader.toggleZeroMargin();
+      await sleep(500);
+      const hAfter = target().getBoundingClientRect().height;
+      c.margin_growth = Math.round(hAfter - hBefore);
+      reader.toggleZeroMargin();
+      await sleep(300);
+      await reader.seekPage(2);
+      await sleep(1800);
+      results.steps.cbz_comic_features = c;
+
+      const problems = [];
+      if (c.dir_default !== 'ltr') problems.push('direção padrão deveria ser ltr');
+      if (c.rtl_right_tap !== 'Pág. 1 / 6' || c.rtl_left_tap !== 'Pág. 2 / 6') problems.push('zonas de toque em RTL');
+      if (c.rtl_saved !== 'rtl') problems.push('direção não foi salva por livro');
+      if (!c.zoom_after_double.includes('scale(2.5)') || !c.label_after_double.startsWith('Pág. 2 / 6')) problems.push('toque duplo não ampliou');
+      if (!c.zoom_after_second_double.includes('scale(1)')) problems.push('segundo toque duplo não voltou');
+      if (c.spread_mode !== 'double') problems.push('modo de duas páginas');
+      if (seq.join('|') !== 'Pág. 1 / 6|Págs. 2–3 / 6|Pág. 4 / 6|Pág. 5 / 6|Pág. 6 / 6') problems.push('sequência de spreads');
+      if (ltrAlts.join('|') !== 'Página 2 de 6|Página 3 de 6') problems.push('ordem LTR das páginas');
+      if (rtlAlts.join('|') !== 'Página 3 de 6|Página 2 de 6') problems.push('ordem RTL das páginas');
+      // Automático: duas páginas só se a janela for larga o bastante (aqui ~936x838, quase quadrada).
+      const [sw, sh] = c.stage_px.split('x').map(Number);
+      const expectedAuto = sw / sh >= 1.2 ? 'double' : 'single';
+      if (c.auto_effective !== expectedAuto || c.single_again !== 'single') problems.push('modo automático');
+      if (!(c.margin_growth > 10)) problems.push('margens zero não aumentaram a página');
+      if (problems.length) throw new Error(`Quadrinhos: ${problems.join('; ')} :: ${JSON.stringify(c)}`);
     }
 
     await closeActiveReader();
