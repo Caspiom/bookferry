@@ -131,8 +131,9 @@ export function createReaderChrome({ api, getReader, getAaPanel, closeReader, is
       syncFullscreenButton();
       window.__bookferryVolumeKey = (dir) => {
         const reader = getReader();
-        if (dir === 'up') reader?.prev?.();
-        else if (dir === 'down') reader?.next?.();
+        // Volume + avança, volume − volta (preferência do Lucas, testada no S23).
+        if (dir === 'up') reader?.next?.();
+        else if (dir === 'down') reader?.prev?.();
       };
       try {
         nativeBridge()?.setVolumeKeysPaging?.(true);
