@@ -1,0 +1,39 @@
+[package]
+name = "bookferry-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Servidor de sincronizacao LAN/local do Bookferry embarcado no desktop Tauri"
+
+[lib]
+name = "bookferry_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bookferry-serverd"
+path = "src/main.rs"
+
+[dependencies]
+axum.workspace = true
+bookferry-core.workspace = true
+httpdate.workspace = true
+hyper-util.workspace = true
+mdns-sd.workspace = true
+rcgen.workspace = true
+rusqlite.workspace = true
+rustls.workspace = true
+rustls-pki-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tokio-stream.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+http-body-util.workspace = true
+hyper.workspace = true
+tempfile.workspace = true

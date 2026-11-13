@@ -1,3 +1,4 @@
+/target/
 docs/pesquisa/.*.log
 spike/**/target/
 spike/**/node_modules/
