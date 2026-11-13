@@ -1,0 +1,36 @@
+[package]
+name = "bookferry-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "bookferry_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "bookferry"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+bookferry-core = { workspace = true }
+bookferry-client = { path = "../../crates/bookferry-client" }
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+bookferry-server = { path = "../../crates/bookferry-server" }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+hyper = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

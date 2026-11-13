@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capacidades padrao do aplicativo Bookferry",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,284 @@
+// Leitor PDF baseado em pdfjs-dist 4.10.38 (Apache-2.0) com HTTP Range via protocolo bookferry://
+// e zoom/pan em duas fases (CSS transform + re-render hi-res no canvas) conforme medido no spike.
+
+import * as pdfjsLib from '../../vendor/pdfjs/pdf.min.mjs';
+import { getBookFileUrl } from '../api.js';
+import {
+  computePagePercent,
+  createDebouncer,
+  formatPageLocator,
+  formatPercent,
+  parsePageLocator,
+} from '../state.js';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  '../../vendor/pdfjs/pdf.worker.min.mjs',
+  import.meta.url,
+).href;
+
+export async function mountPdfReader({
+  book,
+  initialPosition,
+  viewportEl,
+  statusLabelEl,
+  onSavePosition,
+}) {
+  viewportEl.innerHTML = '<div class="reader-loading">Carregando PDF...</div>';
+
+  let destroyed = false;
+  let pdfDoc = null;
+  let totalPages = 1;
+  let currentPage = 1;
+  let fitMode = 'page'; // 'page' | 'width'
+  let zoomScale = 1.0;
+  let renderedScale = 1.0;
+  let tx = 0;
+  let ty = 0;
+  let activeRenderTask = null;
+  let rerenderTimer = null;
+
+  const debouncer = createDebouncer(async (pageNum) => {
+    if (destroyed) return;
+    const locator = formatPageLocator(pageNum);
+    const percent = computePagePercent(pageNum, totalPages);
+    await onSavePosition(book.book_id, locator, percent, `Página ${pageNum} de ${totalPages}`);
+  }, 1500);
+
+  const url = getBookFileUrl(book.book_id);
+  const loadingTask = pdfjsLib.getDocument({
+    url,
+    rangeChunkSize: 65536,
+    disableAutoFetch: true,
+    disableStream: false,
+  });
+  pdfDoc = await loadingTask.promise;
+  if (destroyed) {
+    await pdfDoc.destroy();
+    return null;
+  }
+
+  totalPages = Math.max(1, pdfDoc.numPages || 1);
+  currentPage = initialPosition?.locator
+    ? parsePageLocator(initialPosition.locator, totalPages)
+    : 1;
+
+  viewportEl.innerHTML = '';
+  const stageEl = document.createElement('div');
+  stageEl.className = 'zoom-stage';
+
+  const canvasWrap = document.createElement('div');
+  canvasWrap.className = 'zoom-target';
+
+  const canvas = document.createElement('canvas');
+  canvas.className = 'pdf-canvas';
+  canvasWrap.appendChild(canvas);
+  stageEl.appendChild(canvasWrap);
+  viewportEl.appendChild(stageEl);
+
+  function updateStatusLabel() {
+    if (!statusLabelEl) return;
+    const pct = computePagePercent(currentPage, totalPages);
+    const zoomPct = Math.round(zoomScale * 100);
+    statusLabelEl.textContent = `Pág. ${currentPage} / ${totalPages} (${formatPercent(pct)}) · ${zoomPct}%`;
+  }
+
+  function applyCssTransform() {
+    const relativeScale = zoomScale / renderedScale;
+    canvasWrap.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${relativeScale})`;
+  }
+
+  async function renderCurrentPage(targetZoom = zoomScale) {
+    if (destroyed || !pdfDoc) return;
+    if (activeRenderTask) {
+      try {
+        activeRenderTask.cancel();
+      } catch (_) {}
+      activeRenderTask = null;
+    }
+
+    const page = await pdfDoc.getPage(currentPage);
+    if (destroyed) return;
+
+    const unscaledVp = page.getViewport({ scale: 1.0 });
+    const availW = Math.max(280, (viewportEl.clientWidth || 800) - 24);
+    const availH = Math.max(280, (viewportEl.clientHeight || 600) - 24);
+
+    const baseScale =
+      fitMode === 'width'
+        ? availW / unscaledVp.width
+        : Math.min(availW / unscaledVp.width, availH / unscaledVp.height);
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const effectiveScale = baseScale * targetZoom;
+    const hiResVp = page.getViewport({ scale: effectiveScale * dpr });
+
+    canvas.width = Math.floor(hiResVp.width);
+    canvas.height = Math.floor(hiResVp.height);
+    canvas.style.width = `${Math.floor(unscaledVp.width * effectiveScale)}px`;
+    canvas.style.height = `${Math.floor(unscaledVp.height * effectiveScale)}px`;
+
+    const ctx = canvas.getContext('2d', { alpha: false });
+    activeRenderTask = page.render({ canvasContext: ctx, viewport: hiResVp });
+    try {
+      await activeRenderTask.promise;
+      renderedScale = targetZoom;
+      canvasWrap.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(1)`;
+    } catch (_) {
+      // Renderização cancelada por nova mudança de página/zoom
+    }
+    updateStatusLabel();
+  }
+
+  function scheduleHighResRerender() {
+    if (rerenderTimer) clearTimeout(rerenderTimer);
+    rerenderTimer = setTimeout(() => {
+      rerenderTimer = null;
+      renderCurrentPage(zoomScale);
+    }, 140);
+  }
+
+  function setZoom(newZoom) {
+    const clamped = Math.max(0.75, Math.min(4.0, newZoom));
+    zoomScale = Math.round(clamped * 100) / 100;
+    if (zoomScale <= 1.02) {
+      tx = 0;
+      ty = 0;
+    }
+    applyCssTransform();
+    updateStatusLabel();
+    scheduleHighResRerender();
+  }
+
+  // Gestos de Pointer Events (arrastar quando com zoom + pinch com 2 dedos) e Ctrl+Scroll
+  const pointers = new Map();
+  let lastPinchDist = null;
+  let dragStart = null;
+
+  stageEl.addEventListener('pointerdown', (ev) => {
+    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    stageEl.setPointerCapture?.(ev.pointerId);
+    if (pointers.size === 1) {
+      dragStart = { x: ev.clientX - tx, y: ev.clientY - ty, rawX: ev.clientX };
+    } else if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    }
+  });
+
+  stageEl.addEventListener('pointermove', (ev) => {
+    if (!pointers.has(ev.pointerId)) return;
+    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (lastPinchDist && lastPinchDist > 10) {
+        const factor = dist / lastPinchDist;
+        setZoom(zoomScale * factor);
+      }
+      lastPinchDist = dist;
+    } else if (pointers.size === 1 && dragStart && zoomScale > 1.02) {
+      tx = ev.clientX - dragStart.x;
+      ty = ev.clientY - dragStart.y;
+      applyCssTransform();
+    }
+  });
+
+  function onPointerEnd(ev) {
+    pointers.delete(ev.pointerId);
+    if (pointers.size < 2) lastPinchDist = null;
+    if (pointers.size === 0) dragStart = null;
+  }
+
+  stageEl.addEventListener('pointerup', onPointerEnd);
+  stageEl.addEventListener('pointercancel', onPointerEnd);
+
+  stageEl.addEventListener(
+    'wheel',
+    (ev) => {
+      if (ev.ctrlKey || ev.metaKey) {
+        ev.preventDefault();
+        const delta = ev.deltaY < 0 ? 0.15 : -0.15;
+        setZoom(zoomScale + delta);
+      }
+    },
+    { passive: false },
+  );
+
+  await renderCurrentPage(zoomScale);
+
+  async function goToPage(targetPage, triggerSave = true) {
+    const nextP = Math.max(1, Math.min(totalPages, Math.floor(targetPage)));
+    if (nextP === currentPage && triggerSave) return;
+    currentPage = nextP;
+    tx = 0;
+    ty = 0;
+    await renderCurrentPage(zoomScale);
+    if (triggerSave) {
+      debouncer.trigger(currentPage);
+    }
+  }
+
+  return {
+    format: 'pdf',
+    async next() {
+      if (currentPage < totalPages) {
+        await goToPage(currentPage + 1, true);
+      }
+    },
+    async prev() {
+      if (currentPage > 1) {
+        await goToPage(currentPage - 1, true);
+      }
+    },
+    zoomIn() {
+      setZoom(zoomScale + 0.25);
+    },
+    zoomOut() {
+      setZoom(zoomScale - 0.25);
+    },
+    toggleFitMode() {
+      fitMode = fitMode === 'page' ? 'width' : 'page';
+      zoomScale = 1.0;
+      tx = 0;
+      ty = 0;
+      renderCurrentPage(1.0);
+      return fitMode;
+    },
+    async goToRemotePosition(remotePos) {
+      if (!remotePos || !remotePos.locator) return;
+      debouncer.cancel();
+      const target = parsePageLocator(remotePos.locator, totalPages);
+      currentPage = target;
+      tx = 0;
+      ty = 0;
+      await renderCurrentPage(zoomScale);
+    },
+    getCurrentState() {
+      return {
+        locator: formatPageLocator(currentPage),
+        percent: computePagePercent(currentPage, totalPages),
+        snippet: `Página ${currentPage} de ${totalPages}`,
+      };
+    },
+    async flush() {
+      await debouncer.flush();
+    },
+    async destroy() {
+      destroyed = true;
+      if (rerenderTimer) clearTimeout(rerenderTimer);
+      await debouncer.flush();
+      if (activeRenderTask) {
+        try {
+          activeRenderTask.cancel();
+        } catch (_) {}
+      }
+      if (pdfDoc) {
+        try {
+          await pdfDoc.destroy();
+        } catch (_) {}
+      }
+      viewportEl.innerHTML = '';
+    },
+  };
+}

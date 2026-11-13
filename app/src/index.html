@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Bookferry</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- 1. TELA DE PAREAMENTO (primeira execução Android ou Desktop sem servidor local) -->
+    <main id="pairing-screen" class="screen hidden" aria-label="Tela de Pareamento">
+      <div class="pairing-card">
+        <header class="pairing-header">
+          <div class="brand-logo" aria-hidden="true">BF</div>
+          <div>
+            <h1>Bookferry</h1>
+            <p class="subtitle">Leitor e sincronizador local de EPUB, PDF e CBZ na sua LAN</p>
+          </div>
+        </header>
+
+        <!-- Atalho para Desktop: escolher pasta local de livros e iniciar servidor embutido -->
+        <section id="pairing-desktop-vault-block" class="pairing-section hidden">
+          <h2>Modo PC (Servidor + Leitor)</h2>
+          <p class="muted-note">
+            Informe o caminho da sua pasta de livros no computador. O Bookferry iniciará o servidor
+            HTTPS local e pareará este computador automaticamente.
+          </p>
+          <div class="input-row">
+            <input
+              id="pairing-vault-input"
+              type="text"
+              class="text-input"
+              placeholder="/home/usuario/Livros"
+              aria-label="Caminho da pasta de livros no computador"
+            />
+            <button
+              id="btn-pairing-save-vault"
+              type="button"
+              class="btn btn-primary"
+              aria-label="Iniciar servidor com esta pasta"
+            >
+              Iniciar Servidor Local
+            </button>
+          </div>
+        </section>
+
+        <!-- Pareamento por JSON do QR (Android e cliente Desktop remoto) -->
+        <section class="pairing-section">
+          <h2>Conectar a um Servidor Bookferry</h2>
+          <p class="muted-note">
+            Abra as <strong>Configurações</strong> no Bookferry do seu computador, copie o texto
+            JSON exibido abaixo do QR Code e cole no campo a seguir:
+          </p>
+          <textarea
+            id="pairing-qr-input"
+            class="textarea-input"
+            rows="4"
+            placeholder='{"v":1,"ips":["192.168.1.10"],"port":44321,"cert_fp":"SHA256:...","secret":"..."}'
+            aria-label="JSON do QR de pareamento"
+          ></textarea>
+          <div class="pairing-actions">
+            <button
+              id="btn-submit-pair"
+              type="button"
+              class="btn btn-primary"
+              aria-label="Parear dispositivo com o JSON informado"
+            >
+              Parear Dispositivo
+            </button>
+            <!-- Ponto de extensão para scanner de câmera nativo em B2/B3 -->
+            <button
+              id="btn-camera-qr-placeholder"
+              type="button"
+              class="btn btn-secondary"
+              disabled
+              title="Leitura por câmera será habilitada na rodada B2/B3"
+              aria-label="Escanear QR com a câmera (disponível na rodada B2/B3)"
+            >
+              📷 Ler QR com Câmera (B2/B3)
+            </button>
+            <button
+              id="btn-open-settings-from-pair"
+              type="button"
+              class="btn btn-ghost"
+              aria-label="Abrir configurações"
+            >
+              ⚙ Configurações
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- 2. TELA DA BIBLIOTECA -->
+    <main id="library-screen" class="screen hidden" aria-label="Biblioteca de Livros">
+      <header class="topbar">
+        <div class="topbar-brand">
+          <div class="brand-logo brand-logo-sm" aria-hidden="true">BF</div>
+          <div>
+            <h1 class="topbar-title">Biblioteca</h1>
+            <span id="library-count-label" class="topbar-subtitle">0 livros</span>
+          </div>
+        </div>
+
+        <div class="topbar-search">
+          <input
+            id="library-search-input"
+            type="search"
+            class="search-input"
+            placeholder="Filtrar por título…"
+            aria-label="Buscar livro por título"
+          />
+        </div>
+
+        <div class="topbar-actions">
+          <span
+            id="sync-status-pill"
+            class="sync-pill sync-online"
+            role="status"
+            aria-live="polite"
+          >
+            ● Conectado
+          </span>
+          <button
+            id="btn-refresh-library"
+            type="button"
+            class="btn btn-secondary"
+            aria-label="Atualizar biblioteca"
+            title="Atualizar biblioteca (ou puxe para baixo no celular)"
+          >
+            ↻ Atualizar
+          </button>
+          <button
+            id="btn-open-settings"
+            type="button"
+            class="btn btn-secondary"
+            aria-label="Abrir configurações e pareamento"
+          >
+            ⚙ Ajustes
+          </button>
+        </div>
+      </header>
+
+      <div id="library-scroll-area" class="library-scroll-area">
+        <!-- Seção Continuar Lendo -->
+        <section
+          id="continue-reading-section"
+          class="library-section continue-section hidden"
+          aria-label="Continuar lendo"
+        >
+          <div class="section-header">
+            <h2>Continuar lendo</h2>
+            <span class="section-hint">Ordenado pela última leitura</span>
+          </div>
+          <div id="continue-reading-grid" class="book-grid continue-grid"></div>
+        </section>
+
+        <!-- Todos os livros -->
+        <section class="library-section" aria-label="Todos os livros">
+          <div class="section-header">
+            <h2>Todos os títulos</h2>
+          </div>
+          <div id="library-grid" class="book-grid"></div>
+          <div id="library-empty-state" class="empty-state hidden">
+            <p>Nenhum livro encontrado.</p>
+            <p class="muted-note">
+              Adicione arquivos <code>.epub</code>, <code>.pdf</code> ou <code>.cbz</code> na pasta
+              do servidor e clique em <strong>Atualizar</strong>.
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- 3. TELA DO LEITOR (EPUB, PDF, CBZ) -->
+    <main id="reader-screen" class="screen reader-screen hidden" aria-label="Leitor de Livro">
+      <header class="reader-toolbar">
+        <div class="reader-toolbar-left">
+          <button
+            id="btn-reader-back"
+            type="button"
+            class="btn btn-secondary"
+            aria-label="Voltar para a biblioteca"
+          >
+            ← Biblioteca
+          </button>
+          <button
+            id="btn-reader-toc"
+            type="button"
+            class="btn btn-secondary hidden"
+            aria-label="Abrir índice de capítulos"
+          >
+            ☰ Índice
+          </button>
+          <h2 id="reader-book-title" class="reader-title">Livro</h2>
+        </div>
+
+        <div class="reader-toolbar-right">
+          <!-- Controles exclusivos de EPUB (tamanho de fonte) -->
+          <div id="reader-epub-controls" class="control-group hidden">
+            <button
+              id="btn-font-dec"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Diminuir tamanho da fonte"
+            >
+              A−
+            </button>
+            <button
+              id="btn-font-inc"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Aumentar tamanho da fonte"
+            >
+              A+
+            </button>
+          </div>
+
+          <!-- Controles de PDF e CBZ (zoom e encaixe) -->
+          <div id="reader-zoom-controls" class="control-group hidden">
+            <button
+              id="btn-zoom-out"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Reduzir zoom"
+            >
+              − Zoom
+            </button>
+            <button
+              id="btn-zoom-in"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Aumentar zoom"
+            >
+              + Zoom
+            </button>
+            <button
+              id="btn-fit-toggle"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Alternar modo de ajuste na tela"
+            >
+              Ajustar: Página
+            </button>
+          </div>
+
+          <!-- Navegação de páginas -->
+          <div class="control-group">
+            <button
+              id="btn-reader-prev"
+              type="button"
+              class="btn btn-secondary"
+              aria-label="Página anterior"
+            >
+              ◀ Anterior
+            </button>
+            <button
+              id="btn-reader-next"
+              type="button"
+              class="btn btn-primary"
+              aria-label="Próxima página"
+            >
+              Próxima ▶
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div class="reader-body">
+        <!-- Gaveta lateral de Sumário (TOC) para EPUB -->
+        <aside id="toc-drawer" class="toc-drawer hidden" aria-label="Sumário do livro">
+          <div class="toc-header">
+            <h3>Sumário</h3>
+            <button
+              id="btn-close-toc"
+              type="button"
+              class="btn btn-ghost btn-sm"
+              aria-label="Fechar sumário"
+            >
+              ✕ Fechar
+            </button>
+          </div>
+          <ul id="toc-list" class="toc-list"></ul>
+        </aside>
+
+        <!-- Área principal onde foliate-js / pdf.js / CBZ montam a página -->
+        <div id="reader-viewport" class="reader-viewport"></div>
+      </div>
+
+      <footer class="reader-footer">
+        <span id="reader-status-label" class="reader-status-label" role="status" aria-live="polite">
+          0%
+        </span>
+      </footer>
+    </main>
+
+    <!-- MODAL DE RETOMADA DE LEITURA (ResumeDecision::Ask) -->
+    <div
+      id="resume-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="resume-modal-message"
+    >
+      <div class="modal-card">
+        <h2 id="resume-modal-message">Continuar de onde parou?</h2>
+        <p id="resume-modal-detail" class="muted-note"></p>
+        <div class="modal-actions">
+          <button
+            id="resume-btn-local"
+            type="button"
+            class="btn btn-secondary"
+            aria-label="Ficar na posição deste aparelho"
+          >
+            Ficar aqui
+          </button>
+          <button
+            id="resume-btn-remote"
+            type="button"
+            class="btn btn-primary"
+            aria-label="Continuar na posição do outro aparelho"
+          >
+            Continuar lá
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL DE PROGRESSO DE DOWNLOAD -->
+    <div
+      id="download-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="download-modal-title"
+    >
+      <div class="modal-card">
+        <h2 id="download-modal-title">Baixando livro...</h2>
+        <div class="progress-track progress-track-lg">
+          <div id="download-progress-bar" class="progress-fill" style="width: 0%"></div>
+        </div>
+        <p id="download-progress-label" class="muted-note">0%</p>
+        <div class="modal-actions">
+          <button
+            id="download-cancel-btn"
+            type="button"
+            class="btn btn-danger"
+            aria-label="Cancelar download"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL DE CONFIGURAÇÕES E PAREAMENTO -->
+    <div
+      id="settings-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-modal-title"
+    >
+      <div class="modal-card modal-card-wide">
+        <div class="modal-header">
+          <div>
+            <h2 id="settings-modal-title">Configurações</h2>
+            <span id="settings-app-version" class="muted-note">v0.1.0</span>
+          </div>
+          <button
+            id="btn-close-settings"
+            type="button"
+            class="btn btn-secondary"
+            aria-label="Fechar configurações"
+          >
+            ✕ Fechar
+          </button>
+        </div>
+
+        <div class="modal-scroll-body">
+          <!-- Bloco exclusivo do Desktop: Servidor embutido, QR SVG e aparelhos pareados -->
+          <section id="settings-desktop-server" class="settings-section hidden">
+            <div class="section-title-row">
+              <h3>Servidor no Computador (LAN)</h3>
+              <span id="server-running-badge" class="badge badge-offline">Parado</span>
+            </div>
+
+            <label class="field-label" for="settings-vault-input">
+              Pasta de livros (EPUB, PDF, CBZ):
+            </label>
+            <div class="input-row">
+              <input
+                id="settings-vault-input"
+                type="text"
+                class="text-input"
+                placeholder="/home/usuario/Livros"
+                aria-label="Caminho da pasta de livros no servidor desktop"
+              />
+              <button
+                id="btn-settings-save-vault"
+                type="button"
+                class="btn btn-primary"
+                aria-label="Salvar caminho da pasta de livros"
+              >
+                Salvar pasta
+              </button>
+            </div>
+
+            <div class="qr-pairing-grid">
+              <div class="qr-svg-column">
+                <div
+                  id="server-qr-svg-box"
+                  class="qr-svg-container"
+                  aria-label="QR Code de pareamento"
+                ></div>
+                <div class="qr-timer-row">
+                  <span id="qr-countdown-label" class="qr-timer-text">Expira em 05:00</span>
+                  <button
+                    id="btn-rotate-qr"
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    aria-label="Gerar novo segredo e QR Code"
+                  >
+                    ↻ Gerar novo
+                  </button>
+                </div>
+              </div>
+
+              <div class="qr-details-column">
+                <label class="field-label" for="server-qr-json">
+                  JSON do QR (copiável para parear no celular):
+                </label>
+                <div class="input-row">
+                  <input
+                    id="server-qr-json"
+                    type="text"
+                    class="text-input code-input"
+                    readonly
+                    aria-label="Texto JSON do QR de pareamento"
+                  />
+                  <button
+                    id="btn-copy-qr-json"
+                    type="button"
+                    class="btn btn-secondary"
+                    aria-label="Copiar texto JSON do QR"
+                  >
+                    Copiar JSON
+                  </button>
+                </div>
+
+                <h4>Dispositivos pareados</h4>
+                <ul id="paired-devices-list" class="devices-list"></ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Preferências de leitura e identidade do aparelho -->
+          <section class="settings-section">
+            <h3>Preferências de Leitura e Aparelho</h3>
+            <div class="settings-grid">
+              <div>
+                <label class="field-label" for="settings-device-name">Nome deste aparelho:</label>
+                <input
+                  id="settings-device-name"
+                  type="text"
+                  class="text-input"
+                  aria-label="Nome deste aparelho"
+                />
+              </div>
+
+              <div>
+                <label class="field-label" for="settings-font-size">
+                  Tamanho de fonte padrão (EPUB):
+                </label>
+                <select
+                  id="settings-font-size"
+                  class="select-input"
+                  aria-label="Tamanho de fonte padrão"
+                >
+                  <option value="14">Pequena (14 px)</option>
+                  <option value="16">Compacta (16 px)</option>
+                  <option value="18" selected>Normal (18 px)</option>
+                  <option value="22">Grande (22 px)</option>
+                  <option value="26">Extra grande (26 px)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="field-label" for="settings-theme-select">Tema visual:</label>
+                <select
+                  id="settings-theme-select"
+                  class="select-input"
+                  aria-label="Tema visual do aplicativo"
+                >
+                  <option value="auto">Automático (sistema)</option>
+                  <option value="light">Claro</option>
+                  <option value="dark">Escuro</option>
+                  <option value="sepia">Sépia</option>
+                </select>
+              </div>
+            </div>
+            <div class="settings-actions-row">
+              <button
+                id="btn-save-preferences"
+                type="button"
+                class="btn btn-primary"
+                aria-label="Salvar preferências"
+              >
+                Salvar preferências
+              </button>
+            </div>
+          </section>
+
+          <!-- Status de conexão do cliente -->
+          <section class="settings-section">
+            <h3>Conexão do Cliente</h3>
+            <p class="muted-note">
+              Certificado TLS fixado (pinning):
+              <code id="settings-server-fp">Não pareado</code>
+            </p>
+            <button
+              id="btn-unpair-device"
+              type="button"
+              class="btn btn-danger"
+              aria-label="Desparear este aparelho do servidor"
+            >
+              Desparear este aparelho
+            </button>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTAINER DE TOASTS -->
+    <div id="toast-container" class="toast-container hidden"></div>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>

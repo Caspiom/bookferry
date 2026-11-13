@@ -4,6 +4,7 @@ members = [
     "crates/bookferry-core",
     "crates/bookferry-server",
     "crates/bookferry-client",
+    "app/src-tauri",
 ]
 
 [workspace.package]

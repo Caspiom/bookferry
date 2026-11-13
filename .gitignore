@@ -4,6 +4,14 @@ spike/**/target/
 spike/**/node_modules/
 spike/**/gen/android/.gradle/
 spike/**/gen/android/build/
+node_modules/
+app/**/node_modules/
+app/src-tauri/target/
+app/src-tauri/gen/android/.gradle/
+app/src-tauri/gen/android/build/
+app/src-tauri/gen/android/app/build/
+app/src-tauri/gen/android/local.properties
+app/tests/fixtures-gen/out/
 result
 .direnv/
 spike/.agy-*.log
