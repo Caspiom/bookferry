@@ -5,3 +5,4 @@ spike/**/gen/android/.gradle/
 spike/**/gen/android/build/
 result
 .direnv/
+spike/.agy-*.log

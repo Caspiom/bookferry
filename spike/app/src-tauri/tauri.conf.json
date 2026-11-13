@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Bookferry Spike",
+  "version": "0.0.1",
+  "identifier": "dev.gaspari.bookferry.spike",
+  "build": { "frontendDist": "../src" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "title": "Bookferry spike", "width": 800, "height": 600 }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": true, "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"] }
+}

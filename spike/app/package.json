@@ -1,0 +1,6 @@
+{
+  "name": "bookferry-spike",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Spike descartavel: Tauri v2 minimo (frontend vanilla, sem bundler)"
+}
