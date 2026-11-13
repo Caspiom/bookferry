@@ -9,6 +9,7 @@ import {
   formatPageLocator,
   formatPercent,
   parsePageLocator,
+  resolveTapZone,
 } from '../state.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -163,13 +164,18 @@ export async function mountPdfReader({
   const pointers = new Map();
   let lastPinchDist = null;
   let dragStart = null;
+  let tapInfo = null; // toque simples: dedo único que quase não se mexeu
 
   stageEl.addEventListener('pointerdown', (ev) => {
     pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    stageEl.setPointerCapture?.(ev.pointerId);
+    try {
+      stageEl.setPointerCapture?.(ev.pointerId);
+    } catch (_) {}
     if (pointers.size === 1) {
       dragStart = { x: ev.clientX - tx, y: ev.clientY - ty, rawX: ev.clientX };
+      tapInfo = { x: ev.clientX, y: ev.clientY, moved: false };
     } else if (pointers.size === 2) {
+      tapInfo = null;
       const pts = Array.from(pointers.values());
       lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
     }
@@ -178,6 +184,9 @@ export async function mountPdfReader({
   stageEl.addEventListener('pointermove', (ev) => {
     if (!pointers.has(ev.pointerId)) return;
     pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (tapInfo && Math.hypot(ev.clientX - tapInfo.x, ev.clientY - tapInfo.y) > 8) {
+      tapInfo.moved = true;
+    }
 
     if (pointers.size === 2) {
       const pts = Array.from(pointers.values());
@@ -198,9 +207,22 @@ export async function mountPdfReader({
     pointers.delete(ev.pointerId);
     if (pointers.size < 2) lastPinchDist = null;
     if (pointers.size === 0) dragStart = null;
+    if (ev.type === 'pointercancel') tapInfo = null;
   }
 
-  stageEl.addEventListener('pointerup', onPointerEnd);
+  stageEl.addEventListener('pointerup', (ev) => {
+    onPointerEnd(ev);
+    const tap = tapInfo;
+    tapInfo = null;
+    if (!tap || tap.moved || pointers.size !== 0) return;
+    // Zonas de toque: 30% esquerda / 40% centro (alterna a interface) / 30% direita.
+    // Com zoom o toque lateral não vira página (o dedo está arrastando a página ampliada).
+    const rect = stageEl.getBoundingClientRect();
+    const zone = zoomScale > 1.02 ? 'toggle' : resolveTapZone(ev.clientX - rect.left, rect.width, 'ltr');
+    if (zone === 'toggle') hooks.onToggleChrome?.();
+    else if (zone === 'prev' && currentPage > 1) goToPage(currentPage - 1, true);
+    else if (zone === 'next' && currentPage < totalPages) goToPage(currentPage + 1, true);
+  });
   stageEl.addEventListener('pointercancel', onPointerEnd);
 
   stageEl.addEventListener(

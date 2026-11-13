@@ -8,6 +8,7 @@ import {
   formatPageLocator,
   formatPercent,
   parsePageLocator,
+  resolveTapZone,
 } from '../state.js';
 
 export async function mountCbzReader({
@@ -119,7 +120,9 @@ export async function mountCbzReader({
 
   stageEl.addEventListener('pointerdown', (ev) => {
     pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
-    stageEl.setPointerCapture?.(ev.pointerId);
+    try {
+      stageEl.setPointerCapture?.(ev.pointerId);
+    } catch (_) {}
     if (pointers.size === 1) {
       pointerDownInfo = {
         startX: ev.clientX,
@@ -177,15 +180,19 @@ export async function mountCbzReader({
             loadPage(currentPage - 1, true);
           }
         } else if (!pointerDownInfo.moved) {
-          // Toque nas bordas laterais (25% esquerda = voltar, 25% direita = avançar)
+          // Zonas de toque: 30% esquerda / 40% centro (alterna a interface) / 30% direita
           const rect = stageEl.getBoundingClientRect();
-          const relX = (ev.clientX - rect.left) / Math.max(1, rect.width);
-          if (relX <= 0.25 && currentPage > 1) {
+          const zone = resolveTapZone(ev.clientX - rect.left, rect.width, 'ltr');
+          if (zone === 'toggle') {
+            hooks.onToggleChrome?.();
+          } else if (zone === 'prev' && currentPage > 1) {
             loadPage(currentPage - 1, true);
-          } else if (relX >= 0.75 && currentPage < totalPages) {
+          } else if (zone === 'next' && currentPage < totalPages) {
             loadPage(currentPage + 1, true);
           }
         }
+      } else if (!pointerDownInfo.moved) {
+        hooks.onToggleChrome?.();
       }
       pointerDownInfo = null;
     }

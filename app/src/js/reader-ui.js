@@ -312,6 +312,10 @@ export function mountAaPanel({ bookId, view: initialView, reader, onProgressPref
     open,
     close,
     getPrefs: () => ({ ...prefs }),
+    /** Atalhos Ctrl+= / Ctrl+-: muda o tamanho da fonte em `delta` px (vale a faixa 12–36). */
+    adjustFontSize(delta) {
+      setPrefs({ ...prefs, font_size: prefs.font_size + delta });
+    },
     /** Chama ao fechar o leitor: grava o que estiver pendente. */
     async flush() {
       if (saveTimer) await flushSave();

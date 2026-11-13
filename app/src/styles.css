@@ -1343,3 +1343,28 @@ select:focus-visible {
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
+
+/* ---- Modo imersivo: some a toolbar e o rodapé; fica só um fio de progresso ---- */
+.reader-screen.immersive .reader-toolbar,
+.reader-screen.immersive .aa-panel,
+.reader-screen.immersive .reader-status-label {
+  display: none !important;
+}
+
+.reader-screen.immersive .reader-footer {
+  padding: 0;
+  border-top: none;
+  background: transparent;
+  gap: 0;
+}
+
+.reader-screen.immersive .reader-progress {
+  height: 3px;
+  pointer-events: none;
+}
+
+.reader-screen.immersive .reader-progress::before,
+.reader-screen.immersive .reader-progress-fill {
+  height: 3px;
+  border-radius: 0;
+}

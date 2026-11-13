@@ -9,6 +9,7 @@ import {
 import { mountCbzReader } from './readers/cbz.js';
 import { mountEpubReader } from './readers/epub.js';
 import { mountPdfReader } from './readers/pdf.js';
+import { createReaderChrome } from './reader-chrome.js';
 import { createProgressBar, mountAaPanel, setReaderChromeTheme } from './reader-ui.js';
 import { formatBytes, formatPercent, sanitizeProgressPrefs } from './state.js';
 import {
@@ -32,6 +33,7 @@ const appState = {
   activeReader: null,
   aaPanel: null,
   progressBar: null,
+  chrome: null,
 };
 
 function showScreen(screenId) {
@@ -180,7 +182,13 @@ export async function openBookFlow(book) {
       prefsView = await api.getReaderPrefs(readyBook.book_id);
     } catch (_) {}
     bar?.setItems(sanitizeProgressPrefs(prefsView?.progress));
-    const hooks = { onProgress: (info) => bar?.update(info) };
+    const chrome = appState.chrome;
+    const hooks = {
+      onProgress: (info) => bar?.update(info),
+      onToggleChrome: () => chrome?.toggleImmersive(),
+      onKey: (ev) => chrome?.handleKey(ev),
+      onDismissOverlays: () => appState.aaPanel?.close?.({ restoreFocus: false }),
+    };
 
     if (fmt === 'epub') {
       const reader = await mountEpubReader({
@@ -223,6 +231,7 @@ export async function openBookFlow(book) {
     } else {
       throw new Error(`Formato não suportado: ${readyBook.format}`);
     }
+    appState.chrome?.open();
   } catch (err) {
     showToast(`Erro ao abrir leitor: ${err}`);
     await closeActiveReader();
@@ -230,6 +239,7 @@ export async function openBookFlow(book) {
 }
 
 async function teardownReader() {
+  await appState.chrome?.close();
   if (appState.aaPanel) {
     try {
       await appState.aaPanel.flush();
@@ -365,6 +375,16 @@ function setupEventListeners() {
   document.getElementById('btn-reader-next')?.addEventListener('click', () => {
     appState.activeReader?.next?.();
   });
+  appState.chrome = createReaderChrome({
+    api,
+    getReader: () => appState.activeReader,
+    getAaPanel: () => appState.aaPanel,
+    closeReader: () => closeActiveReader(),
+    isDesktop: () => appState.status?.platform === 'desktop',
+  });
+  document.getElementById('btn-reader-fullscreen')?.addEventListener('click', () => {
+    appState.chrome.toggleFullscreen();
+  });
   appState.progressBar = createProgressBar({
     getReader: () => appState.activeReader,
     bookId: () => appState.activeBook?.book_id || null,
@@ -391,24 +411,9 @@ function setupEventListeners() {
   // Atalhos de teclado no leitor
   window.addEventListener('keydown', (ev) => {
     if (!appState.activeReader) return;
-    if (ev.key === 'Escape' && appState.aaPanel?.isOpen()) {
-      ev.preventDefault();
-      appState.aaPanel.close();
-      return;
-    }
-    const tag = ev.target?.tagName;
-    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-    if (ev.key === 'ArrowRight' || ev.key === 'PageDown') {
-      ev.preventDefault();
-      appState.activeReader.next?.();
-    } else if (ev.key === 'ArrowLeft' || ev.key === 'PageUp') {
-      ev.preventDefault();
-      appState.activeReader.prev?.();
-    } else if (ev.key === 'Escape') {
-      ev.preventDefault();
-      closeActiveReader();
-    }
+    appState.chrome?.handleKey(ev);
   });
+
 
   // Modal de Configurações
   const settingsModal = document.getElementById('settings-modal');
@@ -747,6 +752,88 @@ async function runE2eAutomation() {
       if (problems.length) throw new Error(`Painel Aa: ${problems.join('; ')} :: ${JSON.stringify(aa)}`);
     }
 
+
+    // 1c. Modo imersivo, teclado e tela cheia (EPUB)
+    {
+      const im = {};
+      const reader = () => appState.activeReader;
+      const screenEl = document.getElementById('reader-screen');
+      const toolbarShown = () =>
+        getComputedStyle(document.querySelector('.reader-toolbar')).display !== 'none';
+      const clickBook = (frac) => {
+        const doc = reader().getContentDoc();
+        const view = document.querySelector('foliate-view');
+        const vr = view.getBoundingClientRect();
+        const fr = doc.defaultView.frameElement.getBoundingClientRect();
+        const x = vr.left + vr.width * frac - fr.left; // coordenada dentro do iframe
+        doc.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: 100, view: doc.defaultView }),
+        );
+      };
+      const anchor = reader().getCurrentState().locator;
+      im.toolbar_before = toolbarShown();
+
+      clickBook(0.5);
+      await sleep(600); // toque simples espera o possível segundo toque (220 ms)
+      im.immersive_after_center_tap = screenEl.classList.contains('immersive');
+      im.toolbar_in_immersive = toolbarShown();
+      await sleep(900);
+      im.anchor_visible_in_immersive = reader().anchorIsVisible(anchor);
+      results.screenshots.push(await api.e2eCaptureScreenshot('12-epub-immersive'));
+
+      clickBook(0.5);
+      await sleep(600);
+      im.immersive_after_second_tap = screenEl.classList.contains('immersive');
+      im.toolbar_after_second_tap = toolbarShown();
+
+      // Zona lateral direita vira a página; esquerda volta.
+      const before = reader().getCurrentState();
+      clickBook(0.9);
+      await sleep(1500);
+      im.right_tap_turned_page = reader().getCurrentState().locator !== before.locator;
+      clickBook(0.1);
+      await sleep(1500);
+
+      // Teclado: F alterna imersivo; Esc sai do imersivo SEM fechar o leitor.
+      const key = (k, extra = {}) =>
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...extra }));
+      key('f');
+      await sleep(200);
+      im.immersive_after_f = screenEl.classList.contains('immersive');
+      key('Escape');
+      await sleep(200);
+      im.immersive_after_esc = screenEl.classList.contains('immersive');
+      im.reader_open_after_esc = Boolean(reader());
+      const b2 = reader().getCurrentState().locator;
+      key('ArrowRight');
+      await sleep(1500);
+      im.arrow_right_turned = reader().getCurrentState().locator !== b2;
+      key(' ', { shiftKey: true });
+      await sleep(1500);
+
+      // Tela cheia: F11 liga, Esc desliga (sob xvfb sem gerenciador de janelas pode não efetivar).
+      key('F11');
+      await sleep(600);
+      im.fullscreen_after_f11 = await api.isFullscreen();
+      key('Escape');
+      await sleep(600);
+      im.fullscreen_after_esc = await api.isFullscreen();
+      im.reader_open_after_fullscreen_esc = Boolean(reader());
+      results.steps.epub_immersive = im;
+
+      const problems = [];
+      if (!im.toolbar_before) problems.push('toolbar deveria estar visível');
+      if (!im.immersive_after_center_tap || im.toolbar_in_immersive) problems.push('toque central não entrou no imersivo');
+      if (!im.anchor_visible_in_immersive) problems.push('imersivo moveu o ponto de leitura');
+      if (im.immersive_after_second_tap || !im.toolbar_after_second_tap) problems.push('segundo toque não voltou a interface');
+      if (!im.right_tap_turned_page) problems.push('zona direita não virou a página');
+      if (!im.immersive_after_f) problems.push('tecla F');
+      if (im.immersive_after_esc || !im.reader_open_after_esc) problems.push('Esc deveria só sair do imersivo');
+      if (!im.arrow_right_turned) problems.push('seta direita não virou a página');
+      if (im.fullscreen_after_esc || !im.reader_open_after_fullscreen_esc) problems.push('Esc deveria sair da tela cheia e manter o leitor');
+      if (problems.length) throw new Error(`Imersivo: ${problems.join('; ')} :: ${JSON.stringify(im)}`);
+    }
+
     // O "celular" escreve posição mais nova no livro EPUB aberto -> app deve mostrar toast
     const epubState = appState.activeReader.getCurrentState();
     await api.e2ePeerSetPosition(
@@ -806,8 +893,50 @@ async function runE2eAutomation() {
       await sleep(1800);
     }
 
+    {
+      const stage = document.querySelector('.cbz-stage');
+      const screenEl = document.getElementById('reader-screen');
+      const label = document.getElementById('reader-status-label');
+      const tapStage = (frac) => {
+        const r = stage.getBoundingClientRect();
+        const x = r.left + r.width * frac;
+        const y = r.top + r.height / 2;
+        const opts = { bubbles: true, clientX: x, clientY: y, pointerId: 7 };
+        stage.dispatchEvent(new PointerEvent('pointerdown', opts));
+        stage.dispatchEvent(new PointerEvent('pointerup', opts));
+      };
+      const t = {};
+      tapStage(0.5);
+      await sleep(300);
+      t.immersive_after_center = screenEl.classList.contains('immersive');
+      tapStage(0.5);
+      await sleep(300);
+      t.immersive_after_second = screenEl.classList.contains('immersive');
+      const p0 = label.textContent;
+      tapStage(0.9);
+      await sleep(400);
+      t.after_right_tap = label.textContent;
+      tapStage(0.1);
+      await sleep(400);
+      t.after_left_tap = label.textContent;
+      t.start = p0;
+      results.steps.cbz_tap_zones = t;
+      if (!t.immersive_after_center || t.immersive_after_second) throw new Error(`CBZ imersivo: ${JSON.stringify(t)}`);
+      if (t.after_right_tap !== 'Pág. 3 / 6' || t.after_left_tap !== 'Pág. 2 / 6') {
+        throw new Error(`CBZ zonas de toque: ${JSON.stringify(t)}`);
+      }
+    }
+
     await closeActiveReader();
     await sleep(400);
+
+    results.steps.after_close_reader = {
+      immersive: document.getElementById('reader-screen').classList.contains('immersive'),
+      chrome_theme: document.getElementById('reader-screen').dataset.readerTheme || null,
+    };
+    if (results.steps.after_close_reader.immersive || results.steps.after_close_reader.chrome_theme) {
+      throw new Error(`Leitor fechado não restaurou a interface: ${JSON.stringify(results.steps.after_close_reader)}`);
+    }
 
     // 3. Fluxo Resume Ask Modal + Leitor PDF:
     // Define posição local = 20% (pág. 1) e posição remota no "celular" = 60% (pág. 3)
@@ -837,6 +966,36 @@ async function runE2eAutomation() {
     const pdfPeerPos = await api.e2eWaitPeerPosition(pdfBook.book_id, 75.0, 6000, 'page:4');
     results.steps.pdf_sse_to_peer = pdfPeerPos;
     results.screenshots.push(await api.e2eCaptureScreenshot('06-reader-pdf'));
+
+    {
+      const stage = document.querySelector('.zoom-stage');
+      const screenEl = document.getElementById('reader-screen');
+      const label = document.getElementById('reader-status-label');
+      const tapStage = (frac) => {
+        const r = stage.getBoundingClientRect();
+        const opts = { bubbles: true, clientX: r.left + r.width * frac, clientY: r.top + r.height / 2, pointerId: 9 };
+        stage.dispatchEvent(new PointerEvent('pointerdown', opts));
+        stage.dispatchEvent(new PointerEvent('pointerup', opts));
+      };
+      const t = { start: label.textContent };
+      tapStage(0.5);
+      await sleep(300);
+      t.immersive_after_center = screenEl.classList.contains('immersive');
+      tapStage(0.5);
+      await sleep(300);
+      t.immersive_after_second = screenEl.classList.contains('immersive');
+      tapStage(0.9);
+      await sleep(1200);
+      t.after_right_tap = label.textContent;
+      tapStage(0.1);
+      await sleep(1200);
+      t.after_left_tap = label.textContent;
+      results.steps.pdf_tap_zones = t;
+      if (!t.immersive_after_center || t.immersive_after_second) throw new Error(`PDF imersivo: ${JSON.stringify(t)}`);
+      if (t.start !== 'Pág. 4 / 5' || t.after_right_tap !== 'Pág. 5 / 5' || t.after_left_tap !== 'Pág. 4 / 5') {
+        throw new Error(`PDF zonas de toque: ${JSON.stringify(t)}`);
+      }
+    }
 
     await closeActiveReader();
     await sleep(500);
