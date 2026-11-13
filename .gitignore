@@ -1,1 +1,7 @@
 docs/pesquisa/.*.log
+spike/**/target/
+spike/**/node_modules/
+spike/**/gen/android/.gradle/
+spike/**/gen/android/build/
+result
+.direnv/
