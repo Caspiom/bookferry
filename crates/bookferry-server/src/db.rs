@@ -182,6 +182,16 @@ impl Database {
     pub fn open(data_dir: &Path) -> Result<Self, ServerError> {
         std::fs::create_dir_all(data_dir)?;
         let db_path = data_dir.join(DB_FILENAME);
+        // Cria o arquivo com 0600 antes do SQLite: os arquivos -wal/-shm herdam essa permissao.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .mode(0o600)
+                .open(&db_path)?;
+        }
         let mut conn = Connection::open(&db_path)?;
         conn.busy_timeout(Duration::from_millis(5_000))?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -787,4 +797,22 @@ fn run_migrations(conn: &mut Connection) -> Result<(), rusqlite::Error> {
         tx.commit()?;
     }
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod permission_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn database_files_are_owner_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db = Database::open(dir.path()).expect("open");
+        drop(db);
+        for entry in std::fs::read_dir(dir.path()).expect("read_dir") {
+            let entry = entry.expect("entry");
+            let mode = entry.metadata().expect("meta").permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "{:?} deve ser 0600", entry.file_name());
+        }
+    }
 }
