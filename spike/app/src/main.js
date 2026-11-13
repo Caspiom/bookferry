@@ -761,6 +761,385 @@ window.runRisco3EpubBench = async (foreignCfisToVerify = null) => {
 };
 
 // ============================================================================
+// FASE 3: Rede Local (mDNS, TLS Pinning, Pareamento, Sync HLC + SSE, Range, Doze)
+// ============================================================================
+
+const syncBannerEl = document.getElementById("sync-banner");
+
+function loadSavedLanSession() {
+  try {
+    const qrRaw = localStorage.getItem("bookferry_lan_qr");
+    const tok = localStorage.getItem("bookferry_lan_token");
+    if (qrRaw) window.__lanQr = JSON.parse(qrRaw);
+    if (tok) window.__lanToken = tok;
+  } catch (_) {}
+}
+loadSavedLanSession();
+
+function saveLanSession(qr, token) {
+  try {
+    if (qr) {
+      window.__lanQr = qr;
+      localStorage.setItem("bookferry_lan_qr", JSON.stringify(qr));
+    }
+    if (token) {
+      window.__lanToken = token;
+      localStorage.setItem("bookferry_lan_token", token);
+    }
+  } catch (_) {}
+}
+
+window.__onLanSseStatus = async (statusObj) => {
+  appendOut(`[SSE_STATUS] ${JSON.stringify(statusObj)}`);
+  await logResult("FASE3_SSE_STATUS_EVENT", statusObj);
+};
+
+window.__onLanSseEvent = async (evObj) => {
+  const tUi0 = performance.now();
+  const pos = evObj.position || {};
+  const pageNum = pos.page != null ? pos.page : pos.locator;
+  if (syncBannerEl) {
+    syncBannerEl.textContent = `[SSE AO VIVO] Livro: ${pos.book_id} -> Página ${pageNum} (${pos.percent}%) | HLC=${pos.hlc_canonical} | dev=${pos.device}`;
+    syncBannerEl.style.borderLeftColor = "#a6e3a1";
+    syncBannerEl.style.color = "#a6e3a1";
+  }
+
+  await new Promise((r) => requestAnimationFrame(() => r()));
+  const uiRenderDeltaMs = Number((performance.now() - tUi0).toFixed(3));
+  const nowUnixMs = Date.now();
+
+  let ackRes = null;
+  if (window.__lanQr && window.__lanToken) {
+    try {
+      ackRes = await invoke("lan_ack_ui_rendered", {
+        host: window.__lanQr.ip,
+        port: window.__lanQr.port,
+        certSha256: window.__lanQr.cert_sha256,
+        token: window.__lanToken,
+        bookId: pos.book_id,
+        page: pos.page ?? null,
+        hlc: pos.hlc_canonical,
+        serverReceivedUnixMs: pos.server_received_unix_ms,
+        uiRenderDeltaMs,
+      });
+    } catch (e) {
+      console.error("ack err:", e);
+    }
+  }
+
+  const report = {
+    source: "SSE_PUSH",
+    book_id: pos.book_id,
+    page: pos.page,
+    locator: pos.locator,
+    percent: pos.percent,
+    device: pos.device,
+    hlc_canonical: pos.hlc_canonical,
+    server_seq: pos.server_seq,
+    server_received_unix_ms: pos.server_received_unix_ms,
+    android_rust_recv_unix_ms: evObj.android_rust_recv_unix_ms,
+    android_ui_rendered_unix_ms: nowUnixMs,
+    rust_to_ui_dom_ms: uiRenderDeltaMs,
+    banner_text: syncBannerEl ? syncBannerEl.textContent : "",
+    server_ack_roundtrip: ackRes,
+  };
+  await logResult("FASE3_SSE_UI_UPDATED", report);
+};
+
+window.runFase3MdnsColdOne = async (rep = 1, timeoutMs = 2200) => {
+  const mcastHeld = window.AndroidSaf && window.AndroidSaf.setMulticastLock
+    ? window.AndroidSaf.setMulticastLock(true)
+    : false;
+  appendOut(`Rodando mDNS Cold rep=${rep} (multicastLock=${mcastHeld})...`);
+  const rustRes = await invoke("lan_discover_mdns", {
+    rep,
+    mode: "cold",
+    timeoutMs,
+  });
+  let androidNsd = null;
+  if (!rustRes.ok && window.AndroidSaf && window.AndroidSaf.discoverNsdAndroid) {
+    try {
+      androidNsd = JSON.parse(window.AndroidSaf.discoverNsdAndroid(1500));
+    } catch (e) {
+      androidNsd = { error: String(e) };
+    }
+  }
+  const out = {
+    rep,
+    mode: "cold",
+    multicast_lock_held: mcastHeld,
+    rust_mdns_sd: rustRes,
+    android_nsd_manager: androidNsd,
+  };
+  await logResult("FASE3_MDNS_COLD", out);
+  return out;
+};
+
+window.runFase3MdnsWarmSuite = async (reps = 5, timeoutMs = 2200) => {
+  const mcastHeld = window.AndroidSaf && window.AndroidSaf.setMulticastLock
+    ? window.AndroidSaf.setMulticastLock(true)
+    : false;
+  appendOut(`Rodando suíte mDNS Warm (${reps} repetições, multicastLock=${mcastHeld})...`);
+  const runs = [];
+  for (let r = 1; r <= reps; r++) {
+    const res = await invoke("lan_discover_mdns", {
+      rep: r,
+      mode: "warm",
+      timeoutMs,
+    });
+    runs.push(res);
+  }
+  let androidNsd = null;
+  if (window.AndroidSaf && window.AndroidSaf.discoverNsdAndroid) {
+    try {
+      androidNsd = JSON.parse(window.AndroidSaf.discoverNsdAndroid(1800));
+    } catch (e) {
+      androidNsd = { error: String(e) };
+    }
+  }
+  const out = {
+    mode: "warm",
+    multicast_lock_held: mcastHeld,
+    runs,
+    android_nsd_manager: androidNsd,
+  };
+  await logResult("FASE3_MDNS_WARM", out);
+  return out;
+};
+
+window.runFase3TlsAndPairing = async (host = "192.168.1.2", port = 47600) => {
+  try {
+    appendOut(`Lendo QR simulado do servidor em ${host}:${port}...`);
+    const qr = await invoke("lan_read_simulated_qr", { host, port });
+    saveLanSession(qr, null);
+    await logResult("FASE3_QR_SIMULATED", qr);
+
+    appendOut("Executando testes de TLS com Pinning (5 reps hash correto, hash errado, HTTP puro)...");
+    const tlsReport = await invoke("lan_test_tls_pinning", {
+      host: qr.ip,
+      port: qr.port,
+      correctSha256: qr.cert_sha256,
+      repetitions: 5,
+    });
+    await logResult("FASE3_TLS_PINNING", tlsReport);
+
+    appendOut("Executando testes de Pareamento (token inválido=401, segredo errado=401, segredo uso único=200, reuso=403)...");
+    const pairReport = await invoke("lan_test_pairing", {
+      host: qr.ip,
+      port: qr.port,
+      certSha256: qr.cert_sha256,
+      oneTimeSecret: qr.pairing_secret,
+    });
+    if (pairReport.issued_token) {
+      saveLanSession(qr, pairReport.issued_token);
+    }
+    await logResult("FASE3_PAIRING", pairReport);
+
+    if (window.__lanToken) {
+      appendOut("Iniciando listener SSE sobre TLS com Pinning...");
+      const sseStart = await invoke("lan_start_sse_listener", {
+        host: qr.ip,
+        port: qr.port,
+        certSha256: qr.cert_sha256,
+        token: window.__lanToken,
+      });
+      await logResult("FASE3_SSE_STARTED", sseStart);
+    }
+
+    return { qr, tlsReport, pairReport };
+  } catch (err) {
+    await logResult("FASE3_TLS_PAIR_ERROR", { error: String(err) });
+    throw err;
+  }
+};
+
+window.runFase3EnsureSse = async () => {
+  loadSavedLanSession();
+  if (!window.__lanQr || !window.__lanToken) {
+    throw new Error("Sessao LAN nao encontrada; rode runFase3TlsAndPairing primeiro");
+  }
+  const res = await invoke("lan_start_sse_listener", {
+    host: window.__lanQr.ip,
+    port: window.__lanQr.port,
+    certSha256: window.__lanQr.cert_sha256,
+    token: window.__lanToken,
+  });
+  await logResult("FASE3_ENSURE_SSE", res);
+  return res;
+};
+
+window.runFase3PullPosition = async (bookId = "little-nemo") => {
+  loadSavedLanSession();
+  const t0 = performance.now();
+  const res = await invoke("lan_get_position", {
+    host: window.__lanQr.ip,
+    port: window.__lanQr.port,
+    certSha256: window.__lanQr.cert_sha256,
+    token: window.__lanToken,
+    bookId,
+  });
+  const pos = res.response?.position || {};
+  const pageNum = pos.page != null ? pos.page : pos.locator;
+  if (syncBannerEl && pos.book_id) {
+    syncBannerEl.textContent = `[PULL AO REABRIR] Livro: ${pos.book_id} -> Página ${pageNum} (${pos.percent}%) | HLC=${pos.hlc_canonical} | dev=${pos.device}`;
+    syncBannerEl.style.borderLeftColor = "#f9e2af";
+    syncBannerEl.style.color = "#f9e2af";
+  }
+  await new Promise((r) => requestAnimationFrame(() => r()));
+  const totalUiPullMs = Number((performance.now() - t0).toFixed(3));
+  const out = {
+    source: "PULL_ON_REOPEN",
+    total_ui_pull_ms: totalUiPullMs,
+    banner_text: syncBannerEl ? syncBannerEl.textContent : "",
+    ...res,
+  };
+  await logResult("FASE3_PULL_POSITION", out);
+  return out;
+};
+
+window.runFase3LwwConflictTest = async (bookId = "little-nemo") => {
+  loadSavedLanSession();
+  const host = window.__lanQr.ip;
+  const port = window.__lanQr.port;
+  const certSha256 = window.__lanQr.cert_sha256;
+  const token = window.__lanToken;
+
+  // Base HLC no futuro próximo para isolar o cenário concorrente de testes anteriores
+  const baseWall = Date.now() + 10000;
+
+  // 1) PC escreve #1 (pág. 60, wall = baseWall + 100)
+  const w1 = await invoke("lan_put_position", {
+    host,
+    port,
+    certSha256,
+    token,
+    bookId,
+    device: "pc-linux",
+    hlc: `${baseWall + 100}:000000:pc-linux`,
+    locator: "page:60",
+    percent: 14.25,
+    page: 60,
+  });
+
+  // 2) Celular escreve concorrente (pág. 65, wall = baseWall + 200 -> ganha de PC #1)
+  const w2 = await invoke("lan_put_position", {
+    host,
+    port,
+    certSha256,
+    token,
+    bookId,
+    device: "android-s23",
+    hlc: `${baseWall + 200}:000000:android-s23`,
+    locator: "page:65",
+    percent: 15.44,
+    page: 65,
+  });
+
+  // 3) PC escreve #2 (pág. 72, wall = baseWall + 300 -> ganha do celular)
+  const w3 = await invoke("lan_put_position", {
+    host,
+    port,
+    certSha256,
+    token,
+    bookId,
+    device: "pc-linux",
+    hlc: `${baseWall + 300}:000000:pc-linux`,
+    locator: "page:72",
+    percent: 17.1,
+    page: 72,
+  });
+
+  // 4) Escrita concorrente atrasada do celular (pág. 66, wall = baseWall + 250 < baseWall + 300 -> perde no LWW mas fica salva no histórico!)
+  const w4_stale = await invoke("lan_put_position", {
+    host,
+    port,
+    certSha256,
+    token,
+    bookId,
+    device: "android-s23",
+    hlc: `${baseWall + 250}:000001:android-s23`,
+    locator: "page:66",
+    percent: 15.68,
+    page: 66,
+  });
+
+  // 5) Empate de wall_ms, desempate por contador lógico HLC (wall = baseWall + 300, logical = 1 -> ganha de logical = 0!)
+  const w5_logical_tiebreak = await invoke("lan_put_position", {
+    host,
+    port,
+    certSha256,
+    token,
+    bookId,
+    device: "android-s23",
+    hlc: `${baseWall + 300}:000001:android-s23`,
+    locator: "page:75",
+    percent: 17.81,
+    page: 75,
+  });
+
+  const finalGet = await invoke("lan_get_position", {
+    host,
+    port,
+    certSha256,
+    token,
+    bookId,
+  });
+
+  const out = {
+    book_id: bookId,
+    step1_pc_write_1: w1.response,
+    step2_android_concurrent_newer: w2.response,
+    step3_pc_write_2_newer: w3.response,
+    step4_android_stale_concurrent_rejected_without_data_loss: w4_stale.response,
+    step5_hlc_logical_counter_tiebreak: w5_logical_tiebreak.response,
+    final_state_and_audit_history: finalGet.response,
+  };
+  await logResult("FASE3_LWW_CONFLICT", out);
+  return out;
+};
+
+window.runFase3RangeTransfer = async (fileName = "little-nemo-1905-1914.cbz") => {
+  loadSavedLanSession();
+  appendOut(`Iniciando transferência HTTP Range sobre TLS de ${fileName} (295 MB)...`);
+  const targetOutName = "lan-downloaded-little-nemo.cbz";
+  let fdInfo = null;
+  if (window.AndroidSaf && window.AndroidSaf.createWritableDownloadFd) {
+    fdInfo = JSON.parse(window.AndroidSaf.createWritableDownloadFd(targetOutName));
+  } else {
+    throw new Error("AndroidSaf.createWritableDownloadFd indisponivel");
+  }
+  if (!fdInfo.ok) {
+    throw new Error("Falha ao criar arquivo de destino: " + JSON.stringify(fdInfo));
+  }
+
+  // Interrompe exatamente na metade (~147.728.971 bytes de 295.457.942 bytes) e retoma com Range!
+  const interruptAt = 147728971;
+  const rep = await invoke("lan_download_cbz_range", {
+    host: window.__lanQr.ip,
+    port: window.__lanQr.port,
+    certSha256: window.__lanQr.cert_sha256,
+    token: window.__lanToken,
+    fileName,
+    fd: fdInfo.fd,
+    destPath: fdInfo.path,
+    interruptAfterBytes: interruptAt,
+  });
+
+  const fullOut = {
+    fd_creation_method: fdInfo.method,
+    ...rep,
+  };
+  await logResult("FASE3_RANGE_TRANSFER", fullOut);
+  return fullOut;
+};
+
+window.runFase3DumpSseState = async (label = "snapshot") => {
+  const st = await invoke("lan_get_sse_state");
+  await logResult(`FASE3_SSE_STATE_${label}`, st);
+  return st;
+};
+
+// ============================================================================
 // UI Bindings & Autorun
 // ============================================================================
 
@@ -769,25 +1148,45 @@ document.getElementById("btn-ping").addEventListener("click", async () => {
   appendOut(res);
 });
 
-document.getElementById("btn-saf-one").addEventListener("click", () => {
+document.getElementById("btn-f3-mdns")?.addEventListener("click", () => {
+  window.runFase3MdnsWarmSuite(5);
+});
+
+document.getElementById("btn-f3-pair")?.addEventListener("click", () => {
+  window.runFase3TlsAndPairing();
+});
+
+document.getElementById("btn-f3-pull")?.addEventListener("click", () => {
+  window.runFase3PullPosition();
+});
+
+document.getElementById("btn-f3-lww")?.addEventListener("click", () => {
+  window.runFase3LwwConflictTest();
+});
+
+document.getElementById("btn-f3-range")?.addEventListener("click", () => {
+  window.runFase3RangeTransfer();
+});
+
+document.getElementById("btn-saf-one")?.addEventListener("click", () => {
   if (window.AndroidSaf) window.AndroidSaf.pickDocument(false);
   else appendOut("AndroidSaf nao disponivel neste SO");
 });
 
-document.getElementById("btn-saf-multi").addEventListener("click", () => {
+document.getElementById("btn-saf-multi")?.addEventListener("click", () => {
   if (window.AndroidSaf) window.AndroidSaf.pickDocument(true);
   else appendOut("AndroidSaf nao disponivel neste SO");
 });
 
-document.getElementById("btn-r2-cbz").addEventListener("click", () => {
+document.getElementById("btn-r2-cbz")?.addEventListener("click", () => {
   window.runRisco2RafBench();
 });
 
-document.getElementById("btn-r2-pdf").addEventListener("click", () => {
+document.getElementById("btn-r2-pdf")?.addEventListener("click", () => {
   window.runRisco2PdfBench();
 });
 
-document.getElementById("btn-r3-epub").addEventListener("click", () => {
+document.getElementById("btn-r3-epub")?.addEventListener("click", () => {
   window.runRisco3EpubBench();
 });
 

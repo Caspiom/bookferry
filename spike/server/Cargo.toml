@@ -1,0 +1,26 @@
+[package]
+name = "bookferry-server"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "bookferry_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bookferry-server"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.21.7"
+sha2 = "0.10"
+rcgen = { version = "0.13", default-features = false, features = ["crypto", "ring", "pem"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-pki-types = "1"
+mdns-sd = "0.11"
+socket2 = { version = "0.5", features = ["all"] }
+if-addrs = "0.13"
+getrandom = "0.2"

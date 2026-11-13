@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Bookferry Spike - Fase 2</title>
+  <title>Bookferry Spike - Fase 3 (Rede Local)</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -14,11 +14,22 @@
       color: #cdd6f4;
       overflow-x: hidden;
     }
-    h1 { font-size: 1.1rem; margin: 4px 0 8px; }
+    h1 { font-size: 1.05rem; margin: 4px 0 6px; }
+    #sync-banner {
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: #313244;
+      border-left: 4px solid #89b4fa;
+      color: #f9e2af;
+      font-family: monospace;
+      font-size: 0.9rem;
+      font-weight: bold;
+      border-radius: 4px;
+    }
     .controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     button {
-      font-size: 0.85rem;
-      padding: 6px 10px;
+      font-size: 0.8rem;
+      padding: 6px 9px;
       background: #313244;
       color: #cdd6f4;
       border: 1px solid #585b70;
@@ -37,7 +48,6 @@
       overflow-y: auto;
       border: 1px solid #313244;
     }
-    /* Fullscreen comic stage for Risco 2 */
     #comic-stage {
       display: none;
       position: fixed;
@@ -77,7 +87,6 @@
       border-radius: 4px;
       pointer-events: auto;
     }
-    /* Stage for PDF.js and Foliate-js */
     #work-stage {
       display: flex;
       gap: 8px;
@@ -108,14 +117,17 @@
   </style>
 </head>
 <body>
-  <h1>Bookferry Spike — Fase 2</h1>
+  <h1>Bookferry Spike — Fase 3 (LAN + Sync)</h1>
+  <div id="sync-banner">Posição atual: (aguardando sync LAN...)</div>
   <div class="controls">
     <button id="btn-ping">Ping</button>
-    <button id="btn-saf-one">R1: SAF Pick (1)</button>
-    <button id="btn-saf-multi">R1: SAF Pick (Multi)</button>
-    <button id="btn-r2-cbz">R2: CBZ Zoom/Pan</button>
-    <button id="btn-r2-pdf">R2: PDF.js Bench</button>
-    <button id="btn-r3-epub">R3: EPUB CFI</button>
+    <button id="btn-f3-mdns">F3: mDNS</button>
+    <button id="btn-f3-pair">F3: TLS+Pair</button>
+    <button id="btn-f3-pull">F3: Pull Pos</button>
+    <button id="btn-f3-lww">F3: LWW</button>
+    <button id="btn-f3-range">F3: Range 295MB</button>
+    <button id="btn-saf-one">R1: SAF</button>
+    <button id="btn-r2-cbz">R2: CBZ</button>
   </div>
   <pre id="out">(inicializando...)</pre>
 
