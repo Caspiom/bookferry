@@ -7,8 +7,8 @@ pub mod resume;
 pub mod tls;
 
 pub use crate::db::{
-    CachedBook, ClientDatabase, OutboxEntry, PairedServerInfo, ServerBookEntry, CLIENT_DB_FILENAME,
-    CLIENT_SCHEMA_V1_DDL, TOKEN_SECRET_FILENAME,
+    BookMeta, CachedBook, ClientDatabase, OutboxEntry, PairedServerInfo, ServerBookEntry,
+    CLIENT_DB_FILENAME, CLIENT_SCHEMA_V1_DDL, TOKEN_SECRET_FILENAME,
 };
 pub use crate::discovery::{
     build_ordered_candidates, collect_qr_ips, validate_mdns_candidate, DiscoveryProvider,
@@ -173,6 +173,8 @@ pub enum ClientEvent {
     },
     /// Cache local da biblioteca foi atualizado.
     LibraryChanged { total_books: usize },
+    /// Nome, capa ou "Continuar lendo" de um livro mudou (neste ou em outro aparelho).
+    BookMetaChanged { book_id: String, meta: BookMeta },
     /// Progresso de download de um arquivo de livro.
     DownloadProgress {
         book_id: String,
@@ -318,6 +320,44 @@ struct PutPositionResponseDto {
 #[derive(Deserialize)]
 struct GetPositionResponseDto {
     position: PositionRecord,
+}
+
+#[derive(Deserialize)]
+struct BookMetaResponseDto {
+    applied: bool,
+    meta: BookMeta,
+}
+
+#[derive(Deserialize)]
+struct WithoutCoverResponseDto {
+    book_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct SseBookMetaPayloadDto {
+    meta: BookMeta,
+}
+
+/// Origem de uma capa enviada ao servidor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CoverSource {
+    /// Extraida do proprio arquivo (nunca sobrescreve capa escolhida pelo usuario).
+    Embedded,
+    /// Imagem escolhida pelo usuario.
+    Custom,
+    /// Capa buscada na internet por escolha do usuario.
+    Web,
+}
+
+impl CoverSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CoverSource::Embedded => "embedded",
+            CoverSource::Custom => "custom",
+            CoverSource::Web => "web",
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -983,6 +1023,163 @@ impl Client {
         Ok(record)
     }
 
+    /// Define (ou limpa, com `None`/vazio) o nome de exibicao do livro. Exige o servidor online.
+    pub async fn set_display_title(
+        &self,
+        book_id: &str,
+        title: Option<&str>,
+    ) -> Result<BookMeta, ClientError> {
+        let id = BookId::parse(book_id)?;
+        let body = serde_json::to_vec(&serde_json::json!({ "display_title": title }))
+            .map_err(ClientError::Json)?;
+        self.write_book_meta(Method::PUT, format!("/books/{id}/meta"), &[], body)
+            .await
+            .map(|(_, meta)| meta)
+    }
+
+    /// Tira (`hidden = true`) ou devolve o livro do "Continuar lendo" em todos os aparelhos.
+    pub async fn set_continue_hidden(
+        &self,
+        book_id: &str,
+        hidden: bool,
+    ) -> Result<BookMeta, ClientError> {
+        let id = BookId::parse(book_id)?;
+        let body = serde_json::to_vec(&serde_json::json!({ "hidden": hidden }))
+            .map_err(ClientError::Json)?;
+        self.write_book_meta(
+            Method::PUT,
+            format!("/books/{id}/continue-hidden"),
+            &[],
+            body,
+        )
+        .await
+        .map(|(_, meta)| meta)
+    }
+
+    /// Envia a capa do livro (JPEG/PNG/WebP de ate 2 MiB). Retorna `(aplicada, meta)`: `aplicada`
+    /// e `false` quando uma capa `Embedded` foi ignorada por ja existir capa escolhida pelo usuario.
+    pub async fn set_cover(
+        &self,
+        book_id: &str,
+        source: CoverSource,
+        image: Vec<u8>,
+    ) -> Result<(bool, BookMeta), ClientError> {
+        let id = BookId::parse(book_id)?;
+        self.write_book_meta(
+            Method::PUT,
+            format!("/books/{id}/cover?source={}", source.as_str()),
+            &[("content-type", "application/octet-stream")],
+            image,
+        )
+        .await
+    }
+
+    /// Remove a capa ("restaurar original"); o app desktop gera a embutida de novo.
+    pub async fn remove_cover(&self, book_id: &str) -> Result<BookMeta, ClientError> {
+        let id = BookId::parse(book_id)?;
+        self.write_book_meta(
+            Method::DELETE,
+            format!("/books/{id}/cover"),
+            &[],
+            Vec::new(),
+        )
+        .await
+        .map(|(_, meta)| meta)
+    }
+
+    /// Ids dos livros que ainda nao tem capa no servidor.
+    pub async fn books_without_cover(&self) -> Result<Vec<String>, ClientError> {
+        let Some(stored) = self.inner.db.load_pairing()? else {
+            return Err(ClientError::NotPaired);
+        };
+        let resp: WithoutCoverResponseDto = self
+            .inner
+            .try_request_json(&stored, Method::GET, "/books/without-cover", Vec::new())
+            .await?;
+        Ok(resp.book_ids)
+    }
+
+    /// Caminho local da capa do livro (`data_dir/covers/<id>-<versao>`), baixando-a se preciso.
+    /// `Ok(None)` quando o livro nao tem capa. Offline, serve so o que ja foi baixado.
+    pub async fn cover_path(&self, book_id: &str) -> Result<Option<PathBuf>, ClientError> {
+        let id = BookId::parse(book_id)?;
+        let version = self.inner.db.cover_version(id.as_str())?;
+        if version == 0 {
+            return Ok(None);
+        }
+        let dir = self.inner.config.data_dir.join("covers");
+        let path = dir.join(format!("{}-{version}", id.as_str()));
+        if path.is_file() {
+            return Ok(Some(path));
+        }
+        let Some(stored) = self.inner.db.load_pairing()? else {
+            return Err(ClientError::NotPaired);
+        };
+        let (status, bytes) = self
+            .inner
+            .try_request_bytes(
+                &stored,
+                Method::GET,
+                &format!("/books/{id}/cover"),
+                &[],
+                Vec::new(),
+            )
+            .await?;
+        if status == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
+            return Err(parse_api_error(status, &bytes));
+        }
+        tokio::fs::create_dir_all(&dir).await?;
+        // Remove versoes antigas da mesma capa antes de gravar a nova.
+        let prefix = format!("{}-", id.as_str());
+        if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
+            while let Ok(Some(entry)) = rd.next_entry().await {
+                if entry.file_name().to_string_lossy().starts_with(&prefix) {
+                    let _ = tokio::fs::remove_file(entry.path()).await;
+                }
+            }
+        }
+        let tmp = dir.join(format!("{}-{version}.part", id.as_str()));
+        tokio::fs::write(&tmp, &bytes).await?;
+        tokio::fs::rename(&tmp, &path).await?;
+        Ok(Some(path))
+    }
+
+    /// Envia uma escrita de metadados, aplica o resultado ao cache local e avisa a UI.
+    async fn write_book_meta(
+        &self,
+        method: Method,
+        uri: String,
+        extra_headers: &[(&str, &str)],
+        body: Vec<u8>,
+    ) -> Result<(bool, BookMeta), ClientError> {
+        let Some(stored) = self.inner.db.load_pairing()? else {
+            return Err(ClientError::NotPaired);
+        };
+        let (status, bytes) = self
+            .inner
+            .try_request_bytes(&stored, method, &uri, extra_headers, body)
+            .await?;
+        if !status.is_success() {
+            let err = parse_api_error(status, &bytes);
+            if err.is_unauthorized() {
+                self.inner.handle_revocation("token_revoked");
+            }
+            return Err(err);
+        }
+        let resp: BookMetaResponseDto =
+            serde_json::from_slice(&bytes).map_err(ClientError::Json)?;
+        if self.inner.db.apply_book_meta(&resp.meta)? {
+            let _ = self.inner.events_tx.send(ClientEvent::BookMetaChanged {
+                book_id: resp.meta.book_id.clone(),
+                meta: resp.meta.clone(),
+            });
+        }
+        Ok((resp.applied, resp.meta))
+    }
+
     /// Retorna a melhor posicao conhecida para `book_id` (local vs servidor por HLC).
     pub async fn get_position(&self, book_id: &str) -> Result<Option<PositionRecord>, ClientError> {
         let parsed_id = BookId::parse(book_id)?;
@@ -1631,6 +1828,18 @@ fn process_sse_block(inner: &Arc<Inner>, my_device_id: &str, block: &str) {
 
     if let Some(seq) = event_id {
         let _ = inner.db.set_last_sse_event_id(seq);
+    }
+
+    if event_type == "book_meta" && !data_lines.is_empty() {
+        if let Ok(payload) = serde_json::from_str::<SseBookMetaPayloadDto>(&data_lines.join("\n")) {
+            if let Ok(true) = inner.db.apply_book_meta(&payload.meta) {
+                let _ = inner.events_tx.send(ClientEvent::BookMetaChanged {
+                    book_id: payload.meta.book_id.clone(),
+                    meta: payload.meta,
+                });
+            }
+        }
+        return;
     }
 
     if event_type != "position" || data_lines.is_empty() {

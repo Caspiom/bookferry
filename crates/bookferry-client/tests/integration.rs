@@ -1,6 +1,6 @@
 use bookferry_client::{
-    decide_resume, wait_until, Client, ClientConfig, ClientError, ClientEvent, DownloadProgress,
-    MdnsCandidate, MockDiscoveryProvider, PositionOrigin, ResumeDecision,
+    decide_resume, wait_until, Client, ClientConfig, ClientError, ClientEvent, CoverSource,
+    DownloadProgress, MdnsCandidate, MockDiscoveryProvider, PositionOrigin, ResumeDecision,
 };
 use bookferry_core::{sha256_hex, ManualClock, DEFAULT_MAX_FUTURE_DRIFT_MS};
 use bookferry_server::{start as start_server, Config as ServerConfig};
@@ -1415,5 +1415,179 @@ async fn sse_half_open_read_timeout_detects_stalled_server_and_reconnects() {
     );
 
     client.shutdown().await.unwrap();
+    srv.shutdown().await.unwrap();
+}
+
+// ============================================================================
+// Metadados por livro (nome, capa, "Continuar lendo") entre dois aparelhos
+// ============================================================================
+
+#[tokio::test]
+async fn book_meta_syncs_between_devices_and_cover_is_cached_on_disk() {
+    let tmp = TempDir::new().unwrap();
+    let srv_data = tmp.path().join("srv_data");
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let srv = start_server(test_server_config(&srv_data, &vault_dir))
+        .await
+        .unwrap();
+
+    let pc_dir = tmp.path().join("pc");
+    let phone_dir = tmp.path().join("phone");
+    let pc = Client::open(test_client_config(&pc_dir, "PC"))
+        .await
+        .unwrap();
+    let phone = Client::open(test_client_config(&phone_dir, "Celular"))
+        .await
+        .unwrap();
+    pc.pair(&srv.pairing_payload(), "PC").await.unwrap();
+    phone
+        .pair(&srv.rotate_pairing_secret().unwrap(), "Celular")
+        .await
+        .unwrap();
+    let mut rx_phone = phone.subscribe();
+    assert!(
+        wait_for_event(&mut rx_phone, Duration::from_secs(3), |ev| matches!(
+            ev,
+            ClientEvent::Connected { .. }
+        ))
+        .await
+        .is_some()
+    );
+
+    let book_id = pc.library().await.unwrap().books[0].book_id.clone();
+    phone.library().await.unwrap();
+
+    // O PC gera a capa embutida; o celular recebe o evento e baixa o arquivo.
+    let png = {
+        let mut v = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        v.extend_from_slice(b"imagem-fake-da-capa");
+        v
+    };
+    assert_eq!(pc.books_without_cover().await.unwrap().len(), 3);
+    let (applied, meta) = pc
+        .set_cover(&book_id, CoverSource::Embedded, png.clone())
+        .await
+        .unwrap();
+    assert!(applied && meta.cover_version > 0);
+    assert_eq!(pc.books_without_cover().await.unwrap().len(), 2);
+
+    let ev = wait_for_event(
+        &mut rx_phone,
+        Duration::from_secs(3),
+        |ev| matches!(ev, ClientEvent::BookMetaChanged { book_id: b, .. } if b == &book_id),
+    )
+    .await
+    .expect("celular recebe book_meta por SSE");
+    let ClientEvent::BookMetaChanged { meta: seen, .. } = ev else {
+        unreachable!()
+    };
+    assert_eq!(seen.cover_version, meta.cover_version);
+
+    let path = phone
+        .cover_path(&book_id)
+        .await
+        .unwrap()
+        .expect("capa baixada");
+    assert_eq!(std::fs::read(&path).unwrap(), png);
+    assert!(path.starts_with(phone_dir.join("covers")));
+    // Segunda chamada serve do disco (funciona ate com o servidor fora do ar).
+    srv.shutdown().await.unwrap();
+    assert_eq!(phone.cover_path(&book_id).await.unwrap().unwrap(), path);
+    assert!(phone.set_display_title(&book_id, Some("x")).await.is_err());
+
+    pc.shutdown().await.unwrap();
+    phone.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn book_meta_title_hide_user_cover_precedence_and_old_versions_cleanup() {
+    let tmp = TempDir::new().unwrap();
+    let srv_data = tmp.path().join("srv_data");
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let srv = start_server(test_server_config(&srv_data, &vault_dir))
+        .await
+        .unwrap();
+    let dir = tmp.path().join("pc");
+    let pc = Client::open(test_client_config(&dir, "PC")).await.unwrap();
+    pc.pair(&srv.pairing_payload(), "PC").await.unwrap();
+    let book_id = pc.library().await.unwrap().books[0].book_id.clone();
+
+    let meta = pc
+        .set_display_title(&book_id, Some("  Meu   livro "))
+        .await
+        .unwrap();
+    assert_eq!(meta.display_title.as_deref(), Some("Meu livro"));
+    let lib = pc.library().await.unwrap();
+    let b = lib.books.iter().find(|b| b.book_id == book_id).unwrap();
+    assert_eq!(b.display_title.as_deref(), Some("Meu livro"));
+    assert_ne!(b.title, "Meu livro", "o titulo original continua intacto");
+    assert!(pc
+        .set_display_title(&book_id, Some(&"x".repeat(201)))
+        .await
+        .is_err());
+    let cleared = pc.set_display_title(&book_id, Some("   ")).await.unwrap();
+    assert_eq!(cleared.display_title, None);
+
+    let hid = pc.set_continue_hidden(&book_id, true).await.unwrap();
+    assert!(hid.hidden_continue_at_ms.is_some());
+    let lib = pc.library().await.unwrap();
+    assert!(lib
+        .books
+        .iter()
+        .find(|b| b.book_id == book_id)
+        .unwrap()
+        .hidden_continue_at_ms
+        .is_some());
+    assert_eq!(
+        pc.set_continue_hidden(&book_id, false)
+            .await
+            .unwrap()
+            .hidden_continue_at_ms,
+        None
+    );
+
+    // Capa do usuario vence a embutida; capas invalidas sao recusadas.
+    let jpg = |tag: &[u8]| {
+        let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0];
+        v.extend_from_slice(tag);
+        v
+    };
+    let (_, m1) = pc
+        .set_cover(&book_id, CoverSource::Custom, jpg(b"um"))
+        .await
+        .unwrap();
+    let p1 = pc.cover_path(&book_id).await.unwrap().unwrap();
+    let (applied, m_ign) = pc
+        .set_cover(&book_id, CoverSource::Embedded, jpg(b"auto"))
+        .await
+        .unwrap();
+    assert!(!applied);
+    assert_eq!(m_ign.cover_version, m1.cover_version);
+    assert!(pc
+        .set_cover(&book_id, CoverSource::Custom, b"<svg/>".to_vec())
+        .await
+        .is_err());
+    let (_, m2) = pc
+        .set_cover(&book_id, CoverSource::Web, jpg(b"dois"))
+        .await
+        .unwrap();
+    assert!(m2.cover_version > m1.cover_version);
+    let p2 = pc.cover_path(&book_id).await.unwrap().unwrap();
+    assert_ne!(p1, p2);
+    assert!(!p1.exists(), "versao antiga da capa e apagada do disco");
+    assert_eq!(std::fs::read(&p2).unwrap(), jpg(b"dois"));
+
+    // Restaurar original: some a capa e o arquivo local deixa de ser servido.
+    let gone = pc.remove_cover(&book_id).await.unwrap();
+    assert_eq!(gone.cover_version, 0);
+    assert!(pc.cover_path(&book_id).await.unwrap().is_none());
+    // Entrada invalida nao vira caminho.
+    assert!(pc.cover_path("../../etc/passwd").await.is_err());
+
+    pc.shutdown().await.unwrap();
     srv.shutdown().await.unwrap();
 }

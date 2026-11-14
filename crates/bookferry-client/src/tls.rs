@@ -343,7 +343,12 @@ impl PinnedHttpClient {
             // Nunca registra o token em log
             builder = builder.header("authorization", format!("Bearer {tok}"));
         }
-        if !body_bytes.is_empty() {
+        // JSON por padrao; quem envia outro tipo (ex.: imagem de capa) passa o proprio
+        // `content-type` em `extra_headers`, sem duplicar o cabecalho.
+        let custom_content_type = extra_headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
+        if !body_bytes.is_empty() && !custom_content_type {
             builder = builder.header("content-type", "application/json");
         }
         for &(k, v) in extra_headers {

@@ -15,7 +15,7 @@ use std::time::Duration;
 
 pub const CLIENT_DB_FILENAME: &str = "client.db";
 pub const TOKEN_SECRET_FILENAME: &str = "token.secret";
-pub const CURRENT_CLIENT_SCHEMA_VERSION: i32 = 2;
+pub const CURRENT_CLIENT_SCHEMA_VERSION: i32 = 3;
 
 /// DDL completo da versao 1 do banco SQLite local do cliente (`PRAGMA user_version = 1`).
 pub const CLIENT_SCHEMA_V1_DDL: &str = r#"
@@ -148,10 +148,35 @@ pub struct CachedBook {
     pub mtime_ms: u64,
     /// Pasta relativa ao vault do servidor (`""` = raiz), separada por `/`.
     pub folder: String,
+    /// Nome escolhido pelo usuario; a UI mostra este no lugar de `title` quando presente.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_title: Option<String>,
+    /// `0` = sem capa; senao identifica a versao da capa (cache-buster).
+    pub cover_version: u64,
+    /// `embedded`, `custom` ou `web` (`None` = sem capa).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_source: Option<String>,
+    /// Instante em que o usuario tirou o livro do "Continuar lendo" (relogio do servidor).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden_continue_at_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<PositionRecord>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_path: Option<PathBuf>,
+}
+
+/// Metadados editaveis de um livro, como o servidor os envia (resposta das escritas e SSE).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookMeta {
+    pub book_id: String,
+    #[serde(default)]
+    pub display_title: Option<String>,
+    #[serde(default)]
+    pub cover_version: u64,
+    #[serde(default)]
+    pub cover_source: Option<String>,
+    #[serde(default)]
+    pub hidden_continue_at_ms: Option<u64>,
 }
 
 /// Item pendente na fila `outbox` para envio ao servidor (`PUT /books/{id}/position`).
@@ -923,7 +948,7 @@ impl ClientDatabase {
 
         let prev_ids: Vec<(String, String, u64)> = {
             let mut stmt = tx.prepare(
-                "SELECT book_id, folder || '/' || title, mtime_ms FROM cached_books ORDER BY book_id ASC",
+                "SELECT book_id, folder || '/' || title || '|' || COALESCE(display_title, '') || '|' || cover_version || '|' || COALESCE(hidden_continue_at_ms, 0), mtime_ms FROM cached_books ORDER BY book_id ASC",
             )?;
             let rows = stmt.query_map([], |r| {
                 Ok((
@@ -940,8 +965,8 @@ impl ClientDatabase {
             tx.execute(
                 "INSERT INTO cached_books (
                     book_id, partial_md5, title, format, size_bytes, mtime_ms, etag, updated_at_ms,
-                    folder
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8)",
+                    folder, display_title, cover_version, cover_source, hidden_continue_at_ms
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     b.book_id,
                     b.partial_md5,
@@ -951,13 +976,17 @@ impl ClientDatabase {
                     b.mtime_ms as i64,
                     now_ms as i64,
                     b.folder,
+                    b.display_title,
+                    b.cover_version as i64,
+                    b.cover_source,
+                    b.hidden_continue_at_ms.map(|v| v as i64),
                 ],
             )?;
         }
 
         let new_ids: Vec<(String, String, u64)> = {
             let mut stmt = tx.prepare(
-                "SELECT book_id, folder || '/' || title, mtime_ms FROM cached_books ORDER BY book_id ASC",
+                "SELECT book_id, folder || '/' || title || '|' || COALESCE(display_title, '') || '|' || cover_version || '|' || COALESCE(hidden_continue_at_ms, 0), mtime_ms FROM cached_books ORDER BY book_id ASC",
             )?;
             let rows = stmt.query_map([], |r| {
                 Ok((
@@ -986,7 +1015,7 @@ impl ClientDatabase {
                 b.book_id, b.partial_md5, b.title, b.format, b.size_bytes, b.mtime_ms,
                 p.device_id, p.hlc_canonical, p.hlc_wall_ms, p.hlc_logical, p.hlc_node,
                 p.locator, p.snippet, p.percent, p.server_seq, p.updated_at_ms,
-                b.folder
+                b.folder, b.display_title, b.cover_version, b.cover_source, b.hidden_continue_at_ms
              FROM cached_books b
              LEFT JOIN positions p ON b.book_id = p.book_id
              ORDER BY b.title ASC, b.book_id ASC",
@@ -1030,12 +1059,51 @@ impl ClientDatabase {
                 size_bytes: r.get::<_, i64>(4)?.max(0) as u64,
                 mtime_ms: r.get::<_, i64>(5)?.max(0) as u64,
                 folder: r.get(16)?,
+                display_title: r.get(17)?,
+                cover_version: r.get::<_, i64>(18)?.max(0) as u64,
+                cover_source: r.get(19)?,
+                hidden_continue_at_ms: r.get::<_, Option<i64>>(20)?.map(|v| v.max(0) as u64),
                 position,
                 local_path,
             })
         })?;
 
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Aplica metadados recebidos (resposta de escrita ou SSE) a um livro ja em cache.
+    /// Retorna `true` se a linha existe e algo mudou.
+    pub fn apply_book_meta(&self, meta: &BookMeta) -> Result<bool, ClientError> {
+        let conn = self.lock_conn();
+        let n = conn.execute(
+            "UPDATE cached_books
+             SET display_title = ?2, cover_version = ?3, cover_source = ?4, hidden_continue_at_ms = ?5
+             WHERE book_id = ?1
+               AND (display_title IS NOT ?2 OR cover_version != ?3 OR cover_source IS NOT ?4
+                    OR hidden_continue_at_ms IS NOT ?5)",
+            params![
+                meta.book_id,
+                meta.display_title,
+                meta.cover_version as i64,
+                meta.cover_source,
+                meta.hidden_continue_at_ms.map(|v| v as i64),
+            ],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Versao da capa em cache para o livro (`0` = sem capa ou livro desconhecido).
+    pub fn cover_version(&self, book_id: &str) -> Result<u64, ClientError> {
+        let conn = self.lock_conn();
+        Ok(conn
+            .query_row(
+                "SELECT cover_version FROM cached_books WHERE book_id = ?1",
+                params![book_id],
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()?
+            .unwrap_or(0)
+            .max(0) as u64)
     }
 
     pub fn get_download_etag(&self, book_id: &str) -> Result<Option<String>, ClientError> {
@@ -1079,6 +1147,14 @@ pub struct ServerBookEntry {
     /// Ausente em servidores antigos: vira `""` (raiz).
     #[serde(default)]
     pub folder: String,
+    #[serde(default)]
+    pub display_title: Option<String>,
+    #[serde(default)]
+    pub cover_version: u64,
+    #[serde(default)]
+    pub cover_source: Option<String>,
+    #[serde(default)]
+    pub hidden_continue_at_ms: Option<u64>,
     #[serde(default)]
     pub position: Option<PositionRecord>,
 }
@@ -1375,6 +1451,18 @@ fn run_migrations(conn: &mut Connection) -> Result<(), rusqlite::Error> {
         // v2: pasta do livro no cache da biblioteca (navegacao por subpastas na UI).
         let tx = conn.transaction()?;
         tx.execute_batch("ALTER TABLE cached_books ADD COLUMN folder TEXT NOT NULL DEFAULT '';")?;
+        tx.pragma_update(None, "user_version", 2)?;
+        tx.commit()?;
+    }
+    if version < 3 {
+        // v3: nome de exibicao, capa e "Continuar lendo" (metadados editaveis do servidor).
+        let tx = conn.transaction()?;
+        tx.execute_batch(
+            "ALTER TABLE cached_books ADD COLUMN display_title TEXT NULL;
+             ALTER TABLE cached_books ADD COLUMN cover_version INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE cached_books ADD COLUMN cover_source TEXT NULL;
+             ALTER TABLE cached_books ADD COLUMN hidden_continue_at_ms INTEGER NULL;",
+        )?;
         tx.pragma_update(None, "user_version", CURRENT_CLIENT_SCHEMA_VERSION)?;
         tx.commit()?;
     }
@@ -1477,6 +1565,60 @@ mod folder_migration_tests {
     /// Banco v1 existente (sem a coluna `folder`) deve migrar para v2 sem perder o cache e
     /// guardar/ler a pasta dos livros novos.
     #[test]
+    fn book_meta_roundtrips_and_noop_is_detected() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db = ClientDatabase::open(dir.path(), "teste").expect("open");
+        let id = "d41d8cd98f00b204e9800998ecf8427e-10";
+        let entry = ServerBookEntry {
+            book_id: id.into(),
+            partial_md5: "d41d8cd98f00b204e9800998ecf8427e".into(),
+            title: "Original".into(),
+            format: BookFormat::Pdf,
+            size_bytes: 10,
+            mtime_ms: 1,
+            folder: String::new(),
+            display_title: None,
+            cover_version: 0,
+            cover_source: None,
+            hidden_continue_at_ms: None,
+            position: None,
+        };
+        db.store_library_snapshot(std::slice::from_ref(&entry), 5)
+            .expect("snap");
+        let meta = BookMeta {
+            book_id: id.into(),
+            display_title: Some("Meu nome".into()),
+            cover_version: 7,
+            cover_source: Some("custom".into()),
+            hidden_continue_at_ms: Some(99),
+        };
+        assert!(db.apply_book_meta(&meta).expect("apply"));
+        assert!(
+            !db.apply_book_meta(&meta).expect("apply de novo"),
+            "igual = sem mudanca"
+        );
+        let books = db.load_cached_library().expect("load");
+        assert_eq!(books[0].display_title.as_deref(), Some("Meu nome"));
+        assert_eq!(books[0].title, "Original");
+        assert_eq!(
+            (books[0].cover_version, books[0].hidden_continue_at_ms),
+            (7, Some(99))
+        );
+        assert_eq!(db.cover_version(id).expect("v"), 7);
+        // Meta de livro desconhecido nao cria linha.
+        let ghost = BookMeta {
+            book_id: "ffffffffffffffffffffffffffffffff-1".into(),
+            ..BookMeta::default()
+        };
+        assert!(!db.apply_book_meta(&ghost).expect("ghost"));
+        // Mudar so a meta conta como mudanca da biblioteca no proximo snapshot.
+        let mut changed = entry;
+        changed.display_title = Some("Outro".into());
+        let (_, lib_changed, _) = db.store_library_snapshot(&[changed], 6).expect("snap2");
+        assert!(lib_changed);
+    }
+
+    #[test]
     fn v1_cache_migrates_and_roundtrips_folder() {
         let dir = tempfile::tempdir().expect("tempdir");
         {
@@ -1503,6 +1645,10 @@ mod folder_migration_tests {
             size_bytes: 10,
             mtime_ms: 1,
             folder: "dnd/regras".into(),
+            display_title: None,
+            cover_version: 0,
+            cover_source: None,
+            hidden_continue_at_ms: None,
             position: None,
         };
         let (books, changed, _) = db.store_library_snapshot(&[entry], 5).expect("snapshot");
