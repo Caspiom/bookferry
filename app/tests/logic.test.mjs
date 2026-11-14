@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   BUILTIN_PRESETS,
+  cameraErrorMessage,
+  parsePairingPayload,
   DEFAULT_READER_PREFS,
   applyPresetToPrefs,
   bookDisplayTitle,
@@ -723,5 +725,57 @@ describe('busca de capa na internet (Open Library)', () => {
     ]);
     assert.deepEqual(parseOpenLibraryResults(null), []);
     assert.deepEqual(parseOpenLibraryResults({ docs: 'x' }), []);
+  });
+});
+
+describe('parsePairingPayload', () => {
+  const ok = {
+    v: 1,
+    ips: ['192.168.1.2'],
+    ip: '192.168.1.2',
+    port: 47600,
+    cert_sha256: 'aa',
+    spki_sha256: 'bb',
+    secret: 'cc',
+    name: 'PC',
+  };
+  it('aceita o payload do servidor e devolve o texto sem espacos nas pontas', () => {
+    const json = JSON.stringify(ok);
+    assert.equal(parsePairingPayload(`  ${json}\n`), json);
+  });
+  it('rejeita QR que nao e do Bookferry', () => {
+    for (const t of ['https://example.com', 'WIFI:S:casa;T:WPA;P:x;;', '', '[]', '{}', 'null', '{"v":1', 42, null, undefined]) {
+      assert.equal(parsePairingPayload(t), null, String(t));
+    }
+  });
+  it('rejeita payload com campo faltando, vazio ou invalido', () => {
+    for (const patch of [
+      { v: 2 },
+      { v: '1' },
+      { ips: [] },
+      { ips: 'x' },
+      { ips: [''] },
+      { port: 0 },
+      { port: 70000 },
+      { port: 47600.5 },
+      { port: '47600' },
+      { cert_sha256: '' },
+      { spki_sha256: undefined },
+      { secret: ' ' },
+    ]) {
+      assert.equal(parsePairingPayload(JSON.stringify({ ...ok, ...patch })), null, JSON.stringify(patch));
+    }
+  });
+});
+
+describe('cameraErrorMessage', () => {
+  it('distingue permissao negada, sem camera e camera ocupada', () => {
+    const denied = cameraErrorMessage({ name: 'NotAllowedError' });
+    const none = cameraErrorMessage({ name: 'NotFoundError' });
+    const busy = cameraErrorMessage({ name: 'NotReadableError' });
+    assert.match(denied, /permiss/i);
+    assert.match(none, /Nenhuma câmera/);
+    assert.match(busy, /em uso/);
+    assert.equal(new Set([denied, none, busy, cameraErrorMessage(null)]).size, 4);
   });
 });

@@ -147,3 +147,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Literata (variável, eixo wght; subconjuntos latin e latin-ext empacotados pelo Fontsource)
 Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
 Licenciada sob a SIL Open Font License, Versão 1.1. Texto completo em `app/src/fonts/OFL.txt`.
+
+--------------------------------------------------------------------------------
+7. jsQR (`app/src/vendor/jsqr`)
+   Origin: https://github.com/cozmo/jsQR (npm: jsqr@1.4.0, dist/jsQR.js sem alteracoes)
+   Version: 1.4.0
+   License: Apache-2.0
+--------------------------------------------------------------------------------
+
+Copyright Cosmo Wolfe. Licenciada sob a Apache License, Versao 2.0 (mesmo texto
+da licenca do PDF.js acima; http://www.apache.org/licenses/LICENSE-2.0).
+Usada para ler o QR Code de pareamento pela camera do celular.

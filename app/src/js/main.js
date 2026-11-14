@@ -12,13 +12,16 @@ import { mountEpubReader } from './readers/epub.js';
 import { mountPdfReader } from './readers/pdf.js';
 import { updateBookMenu } from './book-menu.js';
 import { generateCoverIfMissing, generateMissingCovers, resizeImageToJpeg } from './covers.js';
+import { decodeQrFromImageData, grabFrame, scanQrFromCamera } from './qr-scanner.js';
 import { createReaderChrome } from './reader-chrome.js';
 import { createProgressBar, mountAaPanel, setReaderChromeTheme } from './reader-ui.js';
 import {
   bookDisplayTitle,
+  cameraErrorMessage,
   formatBytes,
   formatPercent,
   isHiddenFromContinue,
+  parsePairingPayload,
   sanitizeProgressPrefs,
 } from './state.js';
 import {
@@ -81,6 +84,9 @@ async function refreshStatus() {
   if (themeSelect && st.settings?.theme) {
     themeSelect.value = st.settings.theme;
   }
+
+  // Leitura de QR pela câmera só no celular (o webview do desktop não expõe a câmera).
+  document.getElementById('btn-scan-qr')?.classList.toggle('hidden', isDesktop);
 
   const desktopPairVaultBlock = document.getElementById('pairing-desktop-vault-block');
   const settingsDesktopServer = document.getElementById('settings-desktop-server');
@@ -408,15 +414,10 @@ function setupEventListeners() {
     { passive: true },
   );
 
-  // Tela de pareamento: colar JSON do QR
+  // Tela de pareamento: colar JSON do QR ou lê-lo pela câmera
   const pairBtn = document.getElementById('btn-submit-pair');
-  pairBtn?.addEventListener('click', async () => {
+  const pairWithJson = async (qrJson) => {
     const input = document.getElementById('pairing-qr-input');
-    const qrJson = input?.value?.trim() || '';
-    if (!qrJson) {
-      showToast('Cole o JSON do QR de pareamento.');
-      return;
-    }
     try {
       pairBtn.disabled = true;
       await api.pair(qrJson);
@@ -430,6 +431,62 @@ function setupEventListeners() {
     } finally {
       pairBtn.disabled = false;
     }
+  };
+  pairBtn?.addEventListener('click', async () => {
+    const input = document.getElementById('pairing-qr-input');
+    const qrJson = input?.value?.trim() || '';
+    if (!qrJson) {
+      showToast('Cole o JSON do QR de pareamento.');
+      return;
+    }
+    await pairWithJson(qrJson);
+  });
+
+  const scanOverlay = document.getElementById('qr-scan-overlay');
+  let scanAbort = null;
+  const closeQrScan = () => {
+    scanAbort?.abort();
+    scanAbort = null;
+    scanOverlay?.classList.add('hidden');
+  };
+  const cancelQrScan = () => {
+    // O "voltar" do Android desfaz a entrada de historico criada ao abrir o leitor.
+    if (history.state?.bookferryQrScan) history.back();
+    else closeQrScan();
+  };
+  const openQrScan = async () => {
+    if (scanAbort) return;
+    const abort = new AbortController();
+    scanAbort = abort;
+    const status = document.getElementById('qr-scan-status');
+    const hint = 'Aponte a câmera para o QR Code que aparece em Ajustes no computador.';
+    if (status) status.textContent = hint;
+    scanOverlay?.classList.remove('hidden');
+    history.pushState({ bookferryQrScan: true }, '');
+    let qrJson = null;
+    try {
+      qrJson = await scanQrFromCamera({
+        video: document.getElementById('qr-scan-video'),
+        canvas: document.getElementById('qr-scan-canvas'),
+        accept: parsePairingPayload,
+        onIgnored: () => {
+          if (status) status.textContent = 'Esse QR Code não é de pareamento do Bookferry. Procure o QR em Ajustes no computador.';
+        },
+        signal: abort.signal,
+      });
+    } catch (err) {
+      if (err?.name !== 'AbortError') showToast(cameraErrorMessage(err));
+    }
+    if (scanAbort === abort) {
+      closeQrScan();
+      if (history.state?.bookferryQrScan) history.back();
+    }
+    if (qrJson) await pairWithJson(qrJson);
+  };
+  document.getElementById('btn-scan-qr')?.addEventListener('click', openQrScan);
+  document.getElementById('btn-qr-scan-cancel')?.addEventListener('click', cancelQrScan);
+  window.addEventListener('popstate', () => {
+    if (scanAbort) closeQrScan();
   });
 
   // Tela de pareamento (atalho Desktop): configurar pasta de livros e auto-parear em loopback
@@ -1437,6 +1494,35 @@ async function runE2eAutomation() {
 
     // Screenshot da biblioteca atualizada com barras de progresso e "Continuar lendo"
     results.screenshots.push(await api.e2eCaptureScreenshot('07-library-updated'));
+
+    // QR de pareamento: o SVG REAL do servidor, rasterizado em tamanhos de camera, tem de decodificar
+    // (jsQR + canvas no webview) para o mesmo JSON e passar na validacao de pareamento.
+    {
+      const qrDto = await api.rotatePairingQr();
+      const svgUrl = URL.createObjectURL(new Blob([qrDto.svg], { type: 'image/svg+xml' }));
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('SVG do QR nao carregou'));
+        img.src = svgUrl;
+      });
+      const canvas = document.createElement('canvas');
+      const decoded = {};
+      for (const side of [600, 360, 240]) {
+        const frame = grabFrame(img, side, side, canvas);
+        decoded[side] = decodeQrFromImageData(frame);
+      }
+      URL.revokeObjectURL(svgUrl);
+      results.steps.qr_decode_roundtrip = {
+        matches: Object.fromEntries(Object.entries(decoded).map(([k, v]) => [k, v === qrDto.qr_json])),
+        pairing_payload_accepted: parsePairingPayload(decoded[360]) === qrDto.qr_json,
+        foreign_qr_rejected: parsePairingPayload('https://example.com') === null,
+      };
+      const r = results.steps.qr_decode_roundtrip;
+      if (!Object.values(r.matches).every(Boolean) || !r.pairing_payload_accepted || !r.foreign_qr_rejected) {
+        throw new Error(`QR de pareamento nao fez o roundtrip: ${JSON.stringify(r)}`);
+      }
+    }
 
     // Abre modal de configurações mostrando o QR SVG e dispositivos pareados
     document.getElementById('btn-open-settings')?.click();

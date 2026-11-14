@@ -109,7 +109,7 @@
               <h2>Conectar a um Bookferry</h2>
               <p class="muted-note">
                 No computador, abra <strong>Ajustes</strong>, copie o código de pareamento que
-                aparece ao lado do QR Code e cole aqui:
+                aparece ao lado do QR Code e cole aqui, ou leia o QR Code com a câmera:
               </p>
             </div>
           </div>
@@ -129,17 +129,14 @@
             >
               Parear
             </button>
-            <!-- Ponto de extensão para scanner de câmera nativo em B2/B3 -->
             <button
-              id="btn-camera-qr-placeholder"
+              id="btn-scan-qr"
               type="button"
-              class="btn btn-secondary"
-              disabled
-              title="Leitura por câmera será habilitada na rodada B2/B3"
-              aria-label="Escanear QR com a câmera (disponível na rodada B2/B3)"
+              class="btn btn-secondary hidden"
+              aria-label="Ler o QR Code de pareamento com a câmera"
             >
               <svg class="icon" aria-hidden="true"><use href="#i-camera" /></svg>
-              Ler QR com a câmera <span class="soon-tag">em breve</span>
+              Ler QR com a câmera
             </button>
             <button
               id="btn-open-settings-from-pair"
@@ -892,6 +889,15 @@
 
     <!-- CONTAINER DE TOASTS -->
     <div id="toast-container" class="toast-container hidden"></div>
+
+    <!-- Leitor de QR Code de pareamento (Android): camera em tela cheia -->
+    <div id="qr-scan-overlay" class="qr-scan-overlay hidden" role="dialog" aria-modal="true" aria-label="Ler QR Code de pareamento">
+      <video id="qr-scan-video" class="qr-scan-video" playsinline muted></video>
+      <canvas id="qr-scan-canvas" class="hidden"></canvas>
+      <div class="qr-scan-guide" aria-hidden="true"></div>
+      <p id="qr-scan-status" class="qr-scan-status" role="status">Aponte a câmera para o QR Code que aparece em Ajustes no computador.</p>
+      <button id="btn-qr-scan-cancel" type="button" class="btn btn-secondary qr-scan-cancel">Cancelar</button>
+    </div>
 
     <script type="module" src="./js/main.js"></script>
   </body>
