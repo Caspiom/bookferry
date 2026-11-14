@@ -28,3 +28,7 @@ app/branding/kit/webp/
 app/branding/kit/social/
 app/branding/kit/guia-de-marca.png
 app/branding/node_modules
+
+# Marca: kit completo (rasters gerados) fica fora do repo; fonte em app/branding
+/marca/
+app/tests/screenshots/

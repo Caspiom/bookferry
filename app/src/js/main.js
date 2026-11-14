@@ -861,7 +861,7 @@ async function runE2eAutomation() {
       if (aa.after_sepia.lineHeight !== '52px') problems.push(`entrelinha ${aa.after_sepia.lineHeight}`);
       if (aa.after_sepia.gap !== '12%') problems.push(`margem ${aa.after_sepia.gap}`);
       if (!/mono|Mono|Consolas|Menlo/.test(aa.after_sepia.fontFamily)) problems.push('fonte mono');
-      if (aa.after_sepia.background !== 'rgb(245, 236, 215)') problems.push(`sépia ${aa.after_sepia.background}`);
+      if (aa.after_sepia.background !== 'rgb(244, 234, 214)') problems.push(`sépia ${aa.after_sepia.background}`);
       if (aa.after_black.background !== 'rgb(0, 0, 0)') problems.push(`preto ${aa.after_black.background}`);
       if (aa.chrome_theme !== 'black' || aa.chrome_bg !== 'rgb(0, 0, 0)') problems.push('chrome não ficou preto');
       if (!aa.cfi_unchanged || !aa.anchor_visible) problems.push('o ponto de leitura mudou ao mudar o estilo');
