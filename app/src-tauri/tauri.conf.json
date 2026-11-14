@@ -30,6 +30,25 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Gaspari",
+    "copyright": "© Gaspari",
+    "category": "Productivity",
+    "shortDescription": "Leitor de livros e quadrinhos que sincroniza a leitura pela sua rede",
+    "longDescription": "Bookferry lê EPUB, PDF e CBZ no PC e no Android e sincroniza a posição de leitura em tempo real pela rede da sua casa, sem conta e sem nuvem.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "PortugueseBR",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
+    }
   }
 }
