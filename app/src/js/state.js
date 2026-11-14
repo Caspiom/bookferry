@@ -149,12 +149,13 @@ export function deriveCoverStyle(bookId, title, format = 'epub') {
     hash = Math.imul(hash, 16777619);
   }
   const hue = Math.abs(hash) % 360;
-  const hue2 = (hue + 38) % 360;
+  const hue2 = (hue + 22) % 360;
   const cleanTitle = String(title || '').trim();
   const firstAlphaMatch = cleanTitle.match(/[\p{L}\p{N}]/u);
   const initial = (firstAlphaMatch ? firstAlphaMatch[0] : '?').toUpperCase();
   const badge = String(format || 'epub').toUpperCase();
-  const bgGradient = `linear-gradient(145deg, hsl(${hue}, 58%, 34%), hsl(${hue2}, 64%, 22%))`;
+  // Tons de tecido de encadernação: pouca saturação, escuro o bastante para o título claro.
+  const bgGradient = `linear-gradient(160deg, hsl(${hue}, 30%, 38%), hsl(${hue2}, 36%, 24%))`;
   return { initial, hue, bgGradient, badge };
 }
 
@@ -611,10 +612,10 @@ export const BUILTIN_PRESETS = Object.freeze([
 
 /** Cores do conteúdo do livro e do "chrome" por tema efetivo. */
 export const READER_THEME_COLORS = Object.freeze({
-  light: { bg: '#ffffff', fg: '#1c2026', link: '#1d4ed8', dark: false },
-  sepia: { bg: '#f5ecd7', fg: '#3c2f20', link: '#8c5220', dark: false },
-  dark: { bg: '#141821', fg: '#eef2f8', link: '#7aa2f7', dark: true },
-  black: { bg: '#000000', fg: '#d6d6d6', link: '#8ab4f8', dark: true },
+  light: { bg: '#fbf8f3', fg: '#22252b', link: '#9a4a1a', dark: false },
+  sepia: { bg: '#f4ead6', fg: '#46372a', link: '#8c4a1c', dark: false },
+  dark: { bg: '#16191e', fg: '#e4ded3', link: '#e9a271', dark: true },
+  black: { bg: '#000000', fg: '#c9c4ba', link: '#e0a070', dark: true },
 });
 
 /**

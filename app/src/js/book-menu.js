@@ -48,6 +48,7 @@ function renderFields() {
       !isHiddenFromContinue(current);
     hide.classList.toggle('hidden', !inContinue);
   }
+  $('book-menu-remove-download')?.classList.toggle('hidden', !current.downloaded);
   renderPreview();
 }
 
@@ -134,6 +135,14 @@ function wireOnce() {
       closeBookMenu();
     }),
   );
+
+  // Mesmo fluxo do botão de lixeira do card (main.js remove a cópia e atualiza a biblioteca).
+  $('book-menu-remove-download')?.addEventListener('click', () => {
+    if (!current) return;
+    const book = current;
+    closeBookMenu();
+    window.dispatchEvent(new CustomEvent('bookferry:remove-download', { detail: book }));
+  });
 
   setupWebCoverSearch({ getBook: () => current });
 }

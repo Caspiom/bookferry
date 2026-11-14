@@ -139,3 +139,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - mdns-sd: Apache-2.0 OR MIT
 - serde / serde_json / thiserror / sha2 / md-5 / httpdate / getrandom: MIT OR Apache-2.0
 - subtle: BSD-3-Clause
+
+--------------------------------------------------------------------------------
+6. Literata (fonte da interface) — `app/src/fonts/`
+--------------------------------------------------------------------------------
+
+Literata (variável, eixo wght; subconjuntos latin e latin-ext empacotados pelo Fontsource)
+Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
+Licenciada sob a SIL Open Font License, Versão 1.1. Texto completo em `app/src/fonts/OFL.txt`.

@@ -1,0 +1,22 @@
+Kit de marca Bookferry
+======================
+
+svg/       vetores editáveis (Figma, Illustrator, Inkscape). Texto já convertido em curvas.
+pdf/       vetores para gráfica/impressão (mesmos desenhos dos SVGs).
+png/       fundo transparente, em vários tamanhos.
+jpeg/      com fundo (claro, escuro, branco ou preto, conforme a variação) e respiro em volta.
+webp/      versão leve para web, fundo transparente.
+ico/       ícone do Windows (16–256 px).
+favicon/   pacote para site (favicon.ico, .svg, apple-touch-icon, manifest).
+social/    Open Graph, GitHub, Play Store, cabeçalho do X/Twitter, avatar, papéis de parede.
+guia-de-marca.pdf / .png   resumo das cores, tipografia e usos.
+
+Logos: simbolo, horizontal, empilhado, nome
+Variações: cor (fundo claro), cor-fundo-escuro, tinta (uma cor), preto, branco
+Ícones: icone, icone-quadrado, icone-circular, icone-simplificado (16–32 px),
+        icone-claro, icone-claro-quadrado, icone-maskable (PWA/Android)
+
+Cores: Tinta #1B2A3A · Papel #F4ECDD · Brasa #E8874A · Mar #5FA7A3
+Fonte: Literata (SIL Open Font License 1.1)
+
+Regerar: node app/branding/export-kit.mjs

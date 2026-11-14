@@ -4,30 +4,84 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
+    <meta name="color-scheme" content="light dark" />
     <title>Bookferry</title>
+    <link rel="icon" href="./img/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- Ícones (traço 24×24, desenhados para o Bookferry) e a marca. Uso: <svg><use href="#i-..."/></svg> -->
+    <svg class="svg-sprite" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="brand-mark" viewBox="170 190 684 690">
+          <g transform="translate(0 -20)">
+            <rect x="500" y="226" width="24" height="236" rx="12" fill="var(--logo-page)" />
+            <path d="M524 234 C584 246 640 280 708 298 C640 318 584 352 524 366 Z" fill="var(--logo-ember)" />
+            <path d="M512 458 C432 412 330 402 236 426 L236 628 C330 606 432 614 512 660 Z" fill="var(--logo-page)" />
+            <path d="M512 458 C592 412 694 402 788 426 L788 628 C694 606 592 614 512 660 Z" fill="var(--logo-page-2)" />
+            <path d="M196 642 C320 614 430 626 512 678 C594 626 704 614 828 642 L770 744 C690 728 590 738 512 774 C434 738 334 728 254 744 Z" fill="var(--logo-ember)" />
+            <path d="M196 840 q52 -34 104 0 t104 0 t104 0 t104 0 t104 0 t104 0" fill="none" stroke="var(--logo-sea)" stroke-width="32" stroke-linecap="round" />
+          </g>
+        </symbol>
+        <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 18l-6-6 6-6" /></symbol>
+        <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
+        <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></symbol>
+        <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" /></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 4v4.5h-4.5" /></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></symbol>
+        <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.4" fill="currentColor" /><circle cx="12" cy="12" r="1.4" fill="currentColor" /><circle cx="18" cy="12" r="1.4" fill="currentColor" /></symbol>
+        <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></symbol>
+        <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2M8.5 11h5M11 8.5v5" /></symbol>
+        <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2M8.5 11h5" /></symbol>
+        <symbol id="i-fit" viewBox="0 0 24 24"><path d="M3.5 8V5.5a2 2 0 0 1 2-2H8M16 3.5h2.5a2 2 0 0 1 2 2V8M20.5 16v2.5a2 2 0 0 1-2 2H16M8 20.5H5.5a2 2 0 0 1-2-2V16" /><rect x="8.5" y="7.5" width="7" height="9" rx="1" /></symbol>
+        <symbol id="i-book-open" viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5zM12 6.5V20" /></symbol>
+        <symbol id="i-page" viewBox="0 0 24 24"><rect x="6" y="3.5" width="12" height="17" rx="2" /><path d="M9 8h6M9 11.5h6M9 15h3.5" /></symbol>
+        <symbol id="i-frame" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2" /><rect x="7.5" y="7.5" width="9" height="9" rx="1" /></symbol>
+        <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="9" cy="9.5" r="1.6" /><path d="M20.5 15.5l-5-5-9 9" /></symbol>
+        <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5S9.7 5.9 12 3.5z" /></symbol>
+        <symbol id="i-undo" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.5M4 4v4.5h4.5" /></symbol>
+        <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5h10a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7.1 9.6 4.5 4.5 0 0 0 7 18.5z" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.9 12.5h9.2L17.5 7M10 11v5M14 11v5" /></symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8.5h3l1.8-3h6.4l1.8 3h3v11H4z" /><circle cx="12" cy="13.5" r="3.3" /></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /></symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 5 3.5h8.5A1.5 1.5 0 0 1 15 5v.5" /></symbol>
+        <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.2" /><path d="M11 17.5h2" /></symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8.5 20h7M12 16v4" /></symbol>
+        <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" /></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.6v5.4c0 4.3-2.9 7.6-7 9-4.1-1.4-7-4.7-7-9V6.1z" /><path d="M9 12l2 2 4-4" /></symbol>
+      </defs>
+    </svg>
+
     <!-- 1. TELA DE PAREAMENTO (primeira execução Android ou Desktop sem servidor local) -->
     <main id="pairing-screen" class="screen hidden" aria-label="Tela de Pareamento">
-      <div class="pairing-card">
-        <header class="pairing-header">
-          <div class="brand-logo" aria-hidden="true">BF</div>
-          <div>
-            <h1>Bookferry</h1>
-            <p class="subtitle">Leitor e sincronizador local de EPUB, PDF e CBZ na sua LAN</p>
-          </div>
+      <div class="pairing-wrap">
+        <header class="pairing-hero">
+          <svg class="brand-mark brand-mark-lg" aria-hidden="true"><use href="#brand-mark" /></svg>
+          <h1 class="brand-word">Bookferry</h1>
+          <p class="subtitle">
+            Seus livros e quadrinhos no computador, a leitura em qualquer aparelho. EPUB, PDF e CBZ
+            sincronizados pela rede da sua casa.
+          </p>
         </header>
 
         <!-- Atalho para Desktop: escolher pasta local de livros e iniciar servidor embutido -->
-        <section id="pairing-desktop-vault-block" class="pairing-section hidden">
-          <h2>Modo PC (Servidor + Leitor)</h2>
-          <p class="muted-note">
-            Informe o caminho da sua pasta de livros no computador. O Bookferry iniciará o servidor
-            HTTPS local e pareará este computador automaticamente.
-          </p>
+        <section id="pairing-desktop-vault-block" class="pairing-card hidden">
+          <div class="pairing-card-head">
+            <span class="pairing-card-icon" aria-hidden="true"><svg class="icon"><use href="#i-monitor" /></svg></span>
+            <div>
+              <h2>Usar este computador como servidor</h2>
+              <p class="muted-note">
+                Escolha a pasta onde ficam seus livros. O Bookferry liga o servidor local e já pareia
+                este computador.
+              </p>
+            </div>
+          </div>
           <div class="input-row">
             <input
               id="pairing-vault-input"
@@ -42,18 +96,23 @@
               class="btn btn-primary"
               aria-label="Iniciar servidor com esta pasta"
             >
-              Iniciar Servidor Local
+              Iniciar servidor
             </button>
           </div>
         </section>
 
         <!-- Pareamento por JSON do QR (Android e cliente Desktop remoto) -->
-        <section class="pairing-section">
-          <h2>Conectar a um Servidor Bookferry</h2>
-          <p class="muted-note">
-            Abra as <strong>Configurações</strong> no Bookferry do seu computador, copie o texto
-            JSON exibido abaixo do QR Code e cole no campo a seguir:
-          </p>
+        <section class="pairing-card">
+          <div class="pairing-card-head">
+            <span class="pairing-card-icon" aria-hidden="true"><svg class="icon"><use href="#i-link" /></svg></span>
+            <div>
+              <h2>Conectar a um Bookferry</h2>
+              <p class="muted-note">
+                No computador, abra <strong>Ajustes</strong>, copie o código de pareamento que
+                aparece ao lado do QR Code e cole aqui:
+              </p>
+            </div>
+          </div>
           <textarea
             id="pairing-qr-input"
             class="textarea-input"
@@ -68,7 +127,7 @@
               class="btn btn-primary"
               aria-label="Parear dispositivo com o JSON informado"
             >
-              Parear Dispositivo
+              Parear
             </button>
             <!-- Ponto de extensão para scanner de câmera nativo em B2/B3 -->
             <button
@@ -79,7 +138,8 @@
               title="Leitura por câmera será habilitada na rodada B2/B3"
               aria-label="Escanear QR com a câmera (disponível na rodada B2/B3)"
             >
-              📷 Ler QR com Câmera (B2/B3)
+              <svg class="icon" aria-hidden="true"><use href="#i-camera" /></svg>
+              Ler QR com a câmera <span class="soon-tag">em breve</span>
             </button>
             <button
               id="btn-open-settings-from-pair"
@@ -87,7 +147,8 @@
               class="btn btn-ghost"
               aria-label="Abrir configurações"
             >
-              ⚙ Configurações
+              <svg class="icon" aria-hidden="true"><use href="#i-sliders" /></svg>
+              Ajustes
             </button>
           </div>
         </section>
@@ -98,19 +159,17 @@
     <main id="library-screen" class="screen hidden" aria-label="Biblioteca de Livros">
       <header class="topbar">
         <div class="topbar-brand">
-          <div class="brand-logo brand-logo-sm" aria-hidden="true">BF</div>
-          <div>
-            <h1 class="topbar-title">Biblioteca</h1>
-            <span id="library-count-label" class="topbar-subtitle">0 livros</span>
-          </div>
+          <svg class="brand-mark" aria-hidden="true"><use href="#brand-mark" /></svg>
+          <span class="brand-word">Bookferry</span>
         </div>
 
         <div class="topbar-search">
+          <svg class="icon search-icon" aria-hidden="true"><use href="#i-search" /></svg>
           <input
             id="library-search-input"
             type="search"
             class="search-input"
-            placeholder="Filtrar por título…"
+            placeholder="Buscar na biblioteca"
             aria-label="Buscar livro por título"
           />
         </div>
@@ -122,65 +181,74 @@
             role="status"
             aria-live="polite"
           >
-            ● Conectado
+            <span class="sync-dot" aria-hidden="true"></span><span class="sync-text">Conectado</span>
           </span>
           <button
             id="btn-refresh-library"
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-icon"
             aria-label="Atualizar biblioteca"
             title="Atualizar biblioteca (ou puxe para baixo no celular)"
           >
-            ↻ Atualizar
+            <svg class="icon" aria-hidden="true"><use href="#i-refresh" /></svg>
           </button>
           <button
             id="btn-open-settings"
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-icon"
             aria-label="Abrir configurações e pareamento"
+            title="Ajustes"
           >
-            ⚙ Ajustes
+            <svg class="icon" aria-hidden="true"><use href="#i-sliders" /></svg>
           </button>
         </div>
       </header>
 
       <div id="library-scroll-area" class="library-scroll-area">
-        <!-- Seção Continuar Lendo -->
-        <section
-          id="continue-reading-section"
-          class="library-section continue-section hidden"
-          aria-label="Continuar lendo"
-        >
-          <div class="section-header">
-            <h2>Continuar lendo</h2>
-            <span class="section-hint">Ordenado pela última leitura</span>
+        <div class="library-inner">
+          <div class="page-head">
+            <h1 id="library-page-title" class="page-title">Biblioteca</h1>
+            <span id="library-count-label" class="page-subtitle">0 livros</span>
           </div>
-          <div id="continue-reading-grid" class="book-grid continue-grid"></div>
-        </section>
 
-        <!-- Navegação por pastas -->
-        <nav id="folder-breadcrumb" class="folder-breadcrumb hidden" aria-label="Pasta atual"></nav>
-        <section id="folders-section" class="library-section hidden" aria-label="Pastas">
-          <div class="section-header">
-            <h2>Pastas</h2>
-          </div>
-          <div id="folder-grid" class="book-grid folder-grid"></div>
-        </section>
+          <!-- Seção Continuar Lendo -->
+          <section
+            id="continue-reading-section"
+            class="library-section continue-section hidden"
+            aria-label="Continuar lendo"
+          >
+            <div class="section-header">
+              <h2>Continuar lendo</h2>
+              <span class="section-hint">Pela última leitura</span>
+            </div>
+            <div id="continue-reading-grid" class="continue-grid"></div>
+          </section>
 
-        <!-- Livros da pasta atual -->
-        <section id="books-section" class="library-section" aria-label="Livros">
-          <div class="section-header">
-            <h2 id="books-section-title">Livros</h2>
-          </div>
-          <div id="library-grid" class="book-grid"></div>
-          <div id="library-empty-state" class="empty-state hidden">
-            <p>Nenhum livro encontrado.</p>
-            <p class="muted-note">
-              Adicione arquivos <code>.epub</code>, <code>.pdf</code> ou <code>.cbz</code> na pasta
-              do servidor e clique em <strong>Atualizar</strong>.
-            </p>
-          </div>
-        </section>
+          <!-- Navegação por pastas -->
+          <nav id="folder-breadcrumb" class="folder-breadcrumb hidden" aria-label="Pasta atual"></nav>
+          <section id="folders-section" class="library-section hidden" aria-label="Pastas">
+            <div class="section-header">
+              <h2>Pastas</h2>
+            </div>
+            <div id="folder-grid" class="folder-grid"></div>
+          </section>
+
+          <!-- Livros da pasta atual -->
+          <section id="books-section" class="library-section" aria-label="Livros">
+            <div class="section-header">
+              <h2 id="books-section-title">Livros</h2>
+            </div>
+            <div id="library-grid" class="book-grid"></div>
+            <div id="library-empty-state" class="empty-state hidden">
+              <svg class="brand-mark empty-mark" aria-hidden="true"><use href="#brand-mark" /></svg>
+              <p class="empty-title">Nenhum livro por aqui ainda</p>
+              <p class="muted-note">
+                Coloque arquivos <code>.epub</code>, <code>.pdf</code> ou <code>.cbz</code> na pasta
+                do servidor e toque em <strong>Atualizar</strong>.
+              </p>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
 
@@ -191,21 +259,24 @@
           <button
             id="btn-reader-back"
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-icon"
             aria-label="Voltar para a biblioteca"
+            title="Voltar para a biblioteca"
           >
-            ← Biblioteca
+            <svg class="icon" aria-hidden="true"><use href="#i-arrow-left" /></svg>
           </button>
           <button
             id="btn-reader-toc"
             type="button"
-            class="btn btn-secondary hidden"
+            class="btn btn-icon hidden"
             aria-label="Abrir índice de capítulos"
+            title="Sumário"
           >
-            ☰ Índice
+            <svg class="icon" aria-hidden="true"><use href="#i-list" /></svg>
           </button>
-          <h2 id="reader-book-title" class="reader-title">Livro</h2>
         </div>
+
+        <h2 id="reader-book-title" class="reader-title">Livro</h2>
 
         <div class="reader-toolbar-right">
           <!-- Controles exclusivos de EPUB: painel de aparência "Aa" -->
@@ -213,8 +284,9 @@
             <button
               id="btn-reader-aa"
               type="button"
-              class="btn btn-secondary btn-aa"
+              class="btn btn-icon btn-aa"
               aria-label="Aparência do texto"
+              title="Aparência do texto"
               aria-haspopup="dialog"
               aria-expanded="false"
               aria-controls="aa-panel"
@@ -228,38 +300,42 @@
             <button
               id="btn-comic-direction"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-tool"
               aria-label="Direção de leitura"
               title="Direção de leitura (mangá = da direita para a esquerda)"
             >
-              Leitura: →
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow-right" /></svg>
+              <span class="btn-label">Ocidental</span>
             </button>
             <button
               id="btn-comic-spread"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-tool"
               aria-label="Páginas por tela"
               title="Uma página, duas páginas lado a lado ou automático (duas só em tela larga)"
             >
-              Páginas: 1
+              <svg class="icon" aria-hidden="true"><use href="#i-page" /></svg>
+              <span class="btn-label">1 página</span>
             </button>
             <button
               id="btn-comic-cover"
               type="button"
-              class="btn btn-secondary hidden"
+              class="btn btn-tool hidden"
               aria-label="Capa sozinha"
               title="No modo de duas páginas, a capa fica sozinha ou pareada com a página 2"
             >
-              Capa: sozinha
+              <svg class="icon" aria-hidden="true"><use href="#i-image" /></svg>
+              <span class="btn-label">Capa sozinha</span>
             </button>
             <button
               id="btn-comic-margin"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-tool"
               aria-label="Margens"
               title="Sem margens: a página ocupa toda a área da tela"
             >
-              Margens: sim
+              <svg class="icon" aria-hidden="true"><use href="#i-frame" /></svg>
+              <span class="btn-label">Com margem</span>
             </button>
           </div>
 
@@ -268,56 +344,62 @@
             <button
               id="btn-zoom-out"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-icon"
               aria-label="Reduzir zoom"
+              title="Reduzir zoom"
             >
-              − Zoom
+              <svg class="icon" aria-hidden="true"><use href="#i-zoom-out" /></svg>
             </button>
             <button
               id="btn-zoom-in"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-icon"
               aria-label="Aumentar zoom"
+              title="Aumentar zoom"
             >
-              + Zoom
+              <svg class="icon" aria-hidden="true"><use href="#i-zoom-in" /></svg>
             </button>
             <button
               id="btn-fit-toggle"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-tool"
               aria-label="Alternar modo de ajuste na tela"
+              title="Ajustar à página, à largura ou à altura"
             >
-              Ajustar: Página
+              <svg class="icon" aria-hidden="true"><use href="#i-fit" /></svg>
+              <span class="btn-label">Página</span>
             </button>
           </div>
 
           <button
             id="btn-reader-fullscreen"
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-icon"
             aria-label="Tela cheia (F11)"
             title="Tela cheia (F11)"
           >
-            <span aria-hidden="true">⛶</span>
+            <svg class="icon" aria-hidden="true"><use href="#i-maximize" /></svg>
           </button>
 
           <!-- Navegação de páginas -->
-          <div class="control-group">
+          <div class="control-group reader-nav">
             <button
               id="btn-reader-prev"
               type="button"
-              class="btn btn-secondary"
+              class="btn btn-icon"
               aria-label="Página anterior"
+              title="Página anterior"
             >
-              ◀ Anterior
+              <svg class="icon" aria-hidden="true"><use href="#i-chevron-left" /></svg>
             </button>
             <button
               id="btn-reader-next"
               type="button"
-              class="btn btn-primary"
+              class="btn btn-icon"
               aria-label="Próxima página"
+              title="Próxima página"
             >
-              Próxima ▶
+              <svg class="icon" aria-hidden="true"><use href="#i-chevron-right" /></svg>
             </button>
           </div>
         </div>
@@ -326,30 +408,22 @@
       <!-- Painel de aparência do EPUB (pré-visualização ao vivo, preferências por livro) -->
       <section id="aa-panel" class="aa-panel hidden" role="dialog" aria-label="Aparência do texto">
         <div class="aa-section">
-          <div class="aa-label">Predefinições</div>
-          <div id="aa-presets" class="aa-presets"></div>
-          <div class="aa-save-row">
-            <button id="aa-preset-save-open" type="button" class="btn btn-ghost btn-sm">
-              Salvar como predefinição…
-            </button>
-            <form id="aa-preset-form" class="aa-preset-form hidden" autocomplete="off">
-              <input
-                id="aa-preset-name"
-                type="text"
-                maxlength="24"
-                placeholder="Nome (até 24 letras)"
-                aria-label="Nome da predefinição"
-              />
-              <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
-            </form>
+          <div class="aa-label" id="aa-theme-label">Tema</div>
+          <div class="aa-themes" role="radiogroup" aria-labelledby="aa-theme-label">
+            <button type="button" role="radio" class="aa-theme" data-theme="auto"><span class="aa-swatch" aria-hidden="true">Aa</span>Auto</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="light"><span class="aa-swatch" aria-hidden="true">Aa</span>Claro</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="sepia"><span class="aa-swatch" aria-hidden="true">Aa</span>Sépia</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="dark"><span class="aa-swatch" aria-hidden="true">Aa</span>Escuro</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="black"><span class="aa-swatch" aria-hidden="true">Aa</span>Preto</button>
           </div>
-          <div id="aa-preset-error" class="aa-error hidden" role="alert"></div>
         </div>
 
         <div class="aa-section aa-grid">
           <label class="aa-label" for="aa-font-size">Tamanho</label>
           <div class="aa-control">
+            <span class="aa-range-cap aa-range-cap-sm" aria-hidden="true">A</span>
             <input id="aa-font-size" type="range" min="12" max="36" step="1" />
+            <span class="aa-range-cap aa-range-cap-lg" aria-hidden="true">A</span>
             <output id="aa-font-size-out" for="aa-font-size"></output>
           </div>
 
@@ -390,14 +464,24 @@
         </div>
 
         <div class="aa-section">
-          <div class="aa-label" id="aa-theme-label">Tema</div>
-          <div class="aa-themes" role="radiogroup" aria-labelledby="aa-theme-label">
-            <button type="button" role="radio" class="aa-theme" data-theme="auto">Auto</button>
-            <button type="button" role="radio" class="aa-theme" data-theme="light">Claro</button>
-            <button type="button" role="radio" class="aa-theme" data-theme="sepia">Sépia</button>
-            <button type="button" role="radio" class="aa-theme" data-theme="dark">Escuro</button>
-            <button type="button" role="radio" class="aa-theme" data-theme="black">Preto</button>
+          <div class="aa-label">Predefinições</div>
+          <div id="aa-presets" class="aa-presets"></div>
+          <div class="aa-save-row">
+            <button id="aa-preset-save-open" type="button" class="btn btn-ghost btn-sm">
+              Salvar como predefinição…
+            </button>
+            <form id="aa-preset-form" class="aa-preset-form hidden" autocomplete="off">
+              <input
+                id="aa-preset-name"
+                type="text"
+                maxlength="24"
+                placeholder="Nome (até 24 letras)"
+                aria-label="Nome da predefinição"
+              />
+              <button type="submit" class="btn btn-primary btn-sm">Salvar</button>
+            </form>
           </div>
+          <div id="aa-preset-error" class="aa-error hidden" role="alert"></div>
         </div>
 
         <div class="aa-section">
@@ -429,10 +513,11 @@
             <button
               id="btn-close-toc"
               type="button"
-              class="btn btn-ghost btn-sm"
+              class="btn btn-icon"
               aria-label="Fechar sumário"
+              title="Fechar"
             >
-              ✕ Fechar
+              <svg class="icon" aria-hidden="true"><use href="#i-x" /></svg>
             </button>
           </div>
           <ul id="toc-list" class="toc-list"></ul>
@@ -475,7 +560,8 @@
       aria-modal="true"
       aria-labelledby="resume-modal-message"
     >
-      <div class="modal-card">
+      <div class="modal-card modal-card-sm">
+        <span class="modal-icon" aria-hidden="true"><svg class="icon"><use href="#i-book-open" /></svg></span>
         <h2 id="resume-modal-message">Continuar de onde parou?</h2>
         <p id="resume-modal-detail" class="muted-note"></p>
         <div class="modal-actions">
@@ -508,34 +594,27 @@
       aria-labelledby="book-menu-title"
     >
       <div class="modal-card book-menu-card">
-        <h2 id="book-menu-title">Editar livro</h2>
-        <p id="book-menu-original" class="muted-note"></p>
-
-        <label class="field-label" for="book-menu-name">Nome de exibição</label>
-        <div class="input-row">
-          <input
-            id="book-menu-name"
-            type="text"
-            class="text-input"
-            maxlength="200"
-            autocomplete="off"
-            placeholder="Nome do arquivo"
-          />
-          <button id="book-menu-name-save" type="button" class="btn btn-primary btn-sm">
-            Salvar
-          </button>
+        <div class="modal-header">
+          <div>
+            <h2 id="book-menu-title">Editar livro</h2>
+            <p id="book-menu-original" class="muted-note"></p>
+          </div>
         </div>
 
         <div class="book-menu-cover-row">
           <div id="book-menu-cover-preview" class="book-menu-cover-preview" aria-hidden="true"></div>
           <div class="book-menu-cover-actions">
+            <span class="field-label">Capa</span>
             <button id="book-menu-pick-image" type="button" class="btn btn-secondary btn-sm">
+              <svg class="icon" aria-hidden="true"><use href="#i-image" /></svg>
               Escolher imagem…
             </button>
             <button id="book-menu-web-search" type="button" class="btn btn-secondary btn-sm">
+              <svg class="icon" aria-hidden="true"><use href="#i-globe" /></svg>
               Buscar capa na internet
             </button>
             <button id="book-menu-reset-cover" type="button" class="btn btn-ghost btn-sm">
+              <svg class="icon" aria-hidden="true"><use href="#i-undo" /></svg>
               Restaurar capa original
             </button>
           </div>
@@ -564,9 +643,28 @@
           <div id="book-menu-web-results" class="book-menu-web-results"></div>
         </div>
 
+        <label class="field-label" for="book-menu-name">Nome de exibição</label>
+        <div class="input-row">
+          <input
+            id="book-menu-name"
+            type="text"
+            class="text-input"
+            maxlength="200"
+            autocomplete="off"
+            placeholder="Nome do arquivo"
+          />
+          <button id="book-menu-name-save" type="button" class="btn btn-primary btn-sm">
+            Salvar
+          </button>
+        </div>
+
         <div class="modal-actions book-menu-footer">
-          <button id="book-menu-hide-continue" type="button" class="btn btn-secondary hidden">
+          <button id="book-menu-hide-continue" type="button" class="btn btn-ghost hidden">
             Tirar do Continuar lendo
+          </button>
+          <button id="book-menu-remove-download" type="button" class="btn btn-ghost hidden">
+            <svg class="icon" aria-hidden="true"><use href="#i-trash" /></svg>
+            Remover cópia local
           </button>
           <button id="book-menu-close" type="button" class="btn btn-secondary">Fechar</button>
         </div>
@@ -581,7 +679,7 @@
       aria-modal="true"
       aria-labelledby="download-modal-title"
     >
-      <div class="modal-card">
+      <div class="modal-card modal-card-sm">
         <h2 id="download-modal-title">Baixando livro...</h2>
         <div class="progress-track progress-track-lg">
           <div id="download-progress-bar" class="progress-fill" style="width: 0%"></div>
@@ -591,7 +689,7 @@
           <button
             id="download-cancel-btn"
             type="button"
-            class="btn btn-danger"
+            class="btn btn-secondary"
             aria-label="Cancelar download"
           >
             Cancelar
@@ -610,17 +708,21 @@
     >
       <div class="modal-card modal-card-wide">
         <div class="modal-header">
-          <div>
-            <h2 id="settings-modal-title">Configurações</h2>
-            <span id="settings-app-version" class="muted-note">v0.1.0</span>
+          <div class="modal-header-brand">
+            <svg class="brand-mark" aria-hidden="true"><use href="#brand-mark" /></svg>
+            <div>
+              <h2 id="settings-modal-title">Ajustes</h2>
+              <span id="settings-app-version" class="muted-note">v0.1.0</span>
+            </div>
           </div>
           <button
             id="btn-close-settings"
             type="button"
-            class="btn btn-secondary"
+            class="btn btn-icon"
             aria-label="Fechar configurações"
+            title="Fechar"
           >
-            ✕ Fechar
+            <svg class="icon" aria-hidden="true"><use href="#i-x" /></svg>
           </button>
         </div>
 
@@ -628,12 +730,12 @@
           <!-- Bloco exclusivo do Desktop: Servidor embutido, QR SVG e aparelhos pareados -->
           <section id="settings-desktop-server" class="settings-section hidden">
             <div class="section-title-row">
-              <h3>Servidor no Computador (LAN)</h3>
+              <h3>Servidor neste computador</h3>
               <span id="server-running-badge" class="badge badge-offline">Parado</span>
             </div>
 
             <label class="field-label" for="settings-vault-input">
-              Pasta de livros (EPUB, PDF, CBZ):
+              Pasta de livros (EPUB, PDF, CBZ)
             </label>
             <div class="input-row">
               <input
@@ -665,18 +767,21 @@
                   <button
                     id="btn-rotate-qr"
                     type="button"
-                    class="btn btn-secondary btn-sm"
+                    class="btn btn-ghost btn-sm"
                     aria-label="Gerar novo segredo e QR Code"
                   >
-                    ↻ Gerar novo
+                    <svg class="icon" aria-hidden="true"><use href="#i-refresh" /></svg>
+                    Gerar novo
                   </button>
                 </div>
               </div>
 
               <div class="qr-details-column">
-                <label class="field-label" for="server-qr-json">
-                  JSON do QR (copiável para parear no celular):
-                </label>
+                <p class="qr-howto">
+                  <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
+                  No celular, abra o Bookferry e cole o código abaixo para parear.
+                </p>
+                <label class="field-label" for="server-qr-json">Código de pareamento</label>
                 <div class="input-row">
                   <input
                     id="server-qr-json"
@@ -691,11 +796,12 @@
                     class="btn btn-secondary"
                     aria-label="Copiar texto JSON do QR"
                   >
-                    Copiar JSON
+                    <svg class="icon" aria-hidden="true"><use href="#i-copy" /></svg>
+                    Copiar
                   </button>
                 </div>
 
-                <h4>Dispositivos pareados</h4>
+                <h4>Aparelhos pareados</h4>
                 <ul id="paired-devices-list" class="devices-list"></ul>
               </div>
             </div>
@@ -703,10 +809,10 @@
 
           <!-- Preferências de leitura e identidade do aparelho -->
           <section class="settings-section">
-            <h3>Preferências de Leitura e Aparelho</h3>
+            <h3>Leitura e aparelho</h3>
             <div class="settings-grid">
               <div>
-                <label class="field-label" for="settings-device-name">Nome deste aparelho:</label>
+                <label class="field-label" for="settings-device-name">Nome deste aparelho</label>
                 <input
                   id="settings-device-name"
                   type="text"
@@ -717,7 +823,7 @@
 
               <div>
                 <label class="field-label" for="settings-font-size">
-                  Tamanho de fonte padrão (EPUB):
+                  Tamanho de fonte padrão (EPUB)
                 </label>
                 <select
                   id="settings-font-size"
@@ -733,7 +839,7 @@
               </div>
 
               <div>
-                <label class="field-label" for="settings-theme-select">Tema visual:</label>
+                <label class="field-label" for="settings-theme-select">Tema do app</label>
                 <select
                   id="settings-theme-select"
                   class="select-input"
@@ -760,15 +866,15 @@
 
           <!-- Status de conexão do cliente -->
           <section class="settings-section">
-            <h3>Conexão do Cliente</h3>
-            <p class="muted-note">
-              Certificado TLS fixado (pinning):
-              <code id="settings-server-fp">Não pareado</code>
+            <h3>Conexão</h3>
+            <p class="muted-note fp-row">
+              <svg class="icon" aria-hidden="true"><use href="#i-shield" /></svg>
+              <span>Certificado do servidor fixado: <code id="settings-server-fp">Não pareado</code></span>
             </p>
             <button
               id="btn-unpair-device"
               type="button"
-              class="btn btn-danger"
+              class="btn btn-danger-ghost"
               aria-label="Desparear este aparelho do servidor"
             >
               Desparear este aparelho

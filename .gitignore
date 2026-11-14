@@ -20,3 +20,11 @@ spike/fixtures/*
 spike/vendor/
 spike/server/runtime-*
 spike/.agy-pid*
+# Kit de marca: vetores (svg/pdf), favicons e ícones ficam no repo; rasters grandes são regerados
+# com `node app/branding/export-kit.mjs`
+app/branding/kit/png/
+app/branding/kit/jpeg/
+app/branding/kit/webp/
+app/branding/kit/social/
+app/branding/kit/guia-de-marca.png
+app/branding/node_modules
