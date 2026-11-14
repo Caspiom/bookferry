@@ -3,6 +3,40 @@
 import { api } from './api.js';
 import { formatPercent } from './state.js';
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * Cria um ícone do sprite de `index.html` (`<symbol id="i-...">`).
+ * @param {string} id ex.: 'i-more'
+ * @param {string} [className]
+ * @returns {SVGSVGElement}
+ */
+export function createIcon(id, className = 'icon') {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const use = document.createElementNS(SVG_NS, 'use');
+  use.setAttribute('href', `#${id}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+/**
+ * Troca o rótulo de um botão que tem ícone + `.btn-label`, sem apagar o ícone.
+ * Opcionalmente troca o ícone (`<use href>`).
+ * @param {HTMLElement|null} el
+ * @param {string} label
+ * @param {string} [iconId]
+ */
+export function setButtonLabel(el, label, iconId) {
+  if (!el) return;
+  const span = el.querySelector('.btn-label');
+  if (span) span.textContent = label;
+  else el.textContent = label;
+  if (iconId) el.querySelector('use')?.setAttribute('href', `#${iconId}`);
+}
+
 let toastTimeoutId = null;
 let qrCountdownInterval = null;
 const knownDeviceNames = new Map();

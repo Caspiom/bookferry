@@ -23,6 +23,7 @@ import {
   registerKnownDeviceName,
   renderDesktopServerPanel,
   resolveDeviceLabel,
+  setButtonLabel,
   showToast,
   updatePairingQrDisplay,
 } from './ui.js';
@@ -158,26 +159,30 @@ function saveComicPrefs(bookId, prefs) {
 }
 
 const FIT_LABELS = { page: 'Página', width: 'Largura', height: 'Altura' };
-const SPREAD_LABELS = { single: '1', double: '2', auto: 'Auto' };
+const SPREAD_LABELS = { single: '1 página', double: '2 páginas', auto: 'Automático' };
 
 /** Atualiza os rótulos dos botões de quadrinhos conforme as preferências do leitor ativo. */
 function refreshComicButtons() {
   const reader = appState.activeReader;
   if (reader?.format !== 'cbz') return;
   const p = reader.getPrefs();
-  const set = (id, text) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
-  };
-  set('btn-comic-direction', p.direction === 'rtl' ? 'Leitura: ←' : 'Leitura: →');
-  set('btn-comic-spread', `Páginas: ${SPREAD_LABELS[p.spread_mode] || '1'}`);
-  set('btn-comic-cover', p.cover_alone ? 'Capa: sozinha' : 'Capa: pareada');
-  set('btn-comic-margin', p.zero_margin ? 'Margens: não' : 'Margens: sim');
-  set('btn-fit-toggle', `Ajustar: ${FIT_LABELS[p.fit] || 'Página'}`);
+  const $ = (id) => document.getElementById(id);
+  const rtl = p.direction === 'rtl';
+  setButtonLabel($('btn-comic-direction'), rtl ? 'Mangá' : 'Ocidental', rtl ? 'i-arrow-left' : 'i-arrow-right');
+  $('btn-comic-direction')?.setAttribute('title', rtl
+    ? 'Leitura da direita para a esquerda (mangá). Clique para inverter.'
+    : 'Leitura da esquerda para a direita. Clique para mangá (direita → esquerda).');
+  setButtonLabel(
+    $('btn-comic-spread'),
+    SPREAD_LABELS[p.spread_mode] || SPREAD_LABELS.single,
+    p.spread_mode === 'single' ? 'i-page' : 'i-book-open',
+  );
+  setButtonLabel($('btn-comic-cover'), p.cover_alone ? 'Capa sozinha' : 'Capa em par');
+  setButtonLabel($('btn-comic-margin'), p.zero_margin ? 'Sem margem' : 'Com margem');
+  $('btn-comic-margin')?.setAttribute('aria-pressed', String(Boolean(p.zero_margin)));
+  setButtonLabel($('btn-fit-toggle'), FIT_LABELS[p.fit] || FIT_LABELS.page);
   // "Capa" só faz sentido quando há duas páginas na tela.
-  document
-    .getElementById('btn-comic-cover')
-    ?.classList.toggle('hidden', p.spread_mode === 'single');
+  $('btn-comic-cover')?.classList.toggle('hidden', p.spread_mode === 'single');
 }
 
 function updateReaderToolbarForFormat(format) {
@@ -319,6 +324,11 @@ export async function closeActiveReader() {
 }
 
 function setupEventListeners() {
+  // "Remover cópia local" pelo menu do livro (book-menu.js)
+  window.addEventListener('bookferry:remove-download', (ev) => {
+    if (ev.detail?.book_id) removeBookDownloadFlow(ev.detail);
+  });
+
   // Busca por título
   const searchInput = document.getElementById('library-search-input');
   searchInput?.addEventListener('input', (ev) => {
@@ -451,7 +461,7 @@ function setupEventListeners() {
   document.getElementById('btn-fit-toggle')?.addEventListener('click', (ev) => {
     const mode = appState.activeReader?.toggleFitMode?.();
     if (mode && ev.currentTarget) {
-      ev.currentTarget.textContent = `Ajustar: ${FIT_LABELS[mode] || 'Página'}`;
+      setButtonLabel(ev.currentTarget, FIT_LABELS[mode] || FIT_LABELS.page);
     }
   });
   const comicAction = (id, method) =>

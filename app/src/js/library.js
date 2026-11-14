@@ -17,13 +17,39 @@ import {
 } from './state.js';
 import {
   askResumeModal,
+  createIcon,
   downloadModal,
   resolveDeviceLabel,
   showToast,
 } from './ui.js';
 
+/** "há 5 min", "há 3 h", "ontem", "há 4 dias", "12 de mar." — para a última leitura. */
+function formatLastRead(ms) {
+  const t = Number(ms) || 0;
+  if (t <= 0) return '';
+  const diff = Math.max(0, Date.now() - t);
+  const min = Math.round(diff / 60000);
+  if (min < 1) return 'agora há pouco';
+  if (min < 60) return `há ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.round(h / 24);
+  if (d === 1) return 'ontem';
+  if (d < 7) return `há ${d} dias`;
+  return new Date(t).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
 /**
  * Cria o elemento DOM de um card de livro da biblioteca.
+ * Na grade, a capa (2:3) é o card; sem imagem, vira uma "edição de bolso" com o título.
+ * Em "Continuar lendo" o card é horizontal: capa pequena, título, progresso e última leitura.
  * @param {object} book
  * @param {(book: object) => void} onOpenBook
  * @param {(book: object) => void} onRemoveDownload
@@ -31,7 +57,7 @@ import {
  */
 function createBookCardElement(book, onOpenBook, onRemoveDownload, { inContinue = false } = {}) {
   const card = document.createElement('article');
-  card.className = 'book-card';
+  card.className = inContinue ? 'book-card book-card--continue' : 'book-card';
   card.dataset.bookId = book.book_id;
   card.dataset.format = book.format;
 
@@ -39,6 +65,7 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload, { inContinue 
   const cover = deriveCoverStyle(book.book_id, name, book.format);
   const pct = book.position ? Number(book.position.percent) || 0 : 0;
   const pctLabel = formatPercent(pct);
+  const done = pct >= 99.5;
 
   const openBtn = document.createElement('button');
   openBtn.type = 'button';
@@ -51,78 +78,96 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload, { inContinue 
   );
   openBtn.addEventListener('click', () => onOpenBook(book));
 
-  // Capa placeholder gerada (inicial + cor derivada de book_id + selo do formato)
-  const coverDiv = document.createElement('div');
-  coverDiv.className = 'book-cover';
+  // Capa: imagem (quando houver) sobre uma capa gerada com cor derivada do book_id
+  const coverDiv = el('div', 'book-cover');
   coverDiv.style.background = cover.bgGradient;
 
-  const formatBadge = document.createElement('span');
-  formatBadge.className = `format-badge format-${String(book.format).toLowerCase()}`;
-  formatBadge.textContent = cover.badge;
+  const art = el('div', 'book-cover-art');
+  art.append(el('span', 'book-cover-rule'), el('span', 'book-cover-title', name));
 
-  const dlBadge = document.createElement('span');
-  dlBadge.className = `dl-badge ${book.downloaded ? 'is-downloaded' : 'is-cloud'}`;
+  const formatBadge = el('span', `format-badge format-${String(book.format).toLowerCase()}`, cover.badge);
+
+  const dlBadge = el('span', `dl-badge ${book.downloaded ? 'is-downloaded' : 'is-cloud'}`);
   dlBadge.title = book.downloaded
     ? 'Baixado neste aparelho'
     : 'Disponível no servidor (nuvem local)';
   dlBadge.setAttribute('aria-label', dlBadge.title);
-  dlBadge.textContent = book.downloaded ? '✓ Baixado' : '☁ Nuvem';
+  dlBadge.appendChild(createIcon(book.downloaded ? 'i-check' : 'i-cloud'));
 
-  const initialSpan = document.createElement('span');
-  initialSpan.className = 'book-cover-initial';
-  initialSpan.textContent = cover.initial;
+  const initialSpan = el('span', 'book-cover-initial', cover.initial);
+  initialSpan.setAttribute('aria-hidden', 'true');
 
-  coverDiv.appendChild(formatBadge);
-  coverDiv.appendChild(dlBadge);
-  coverDiv.appendChild(initialSpan);
+  coverDiv.append(art, initialSpan, formatBadge, dlBadge);
+  if (pct > 0 && !done) {
+    const coverProgress = el('div', 'book-cover-progress');
+    const coverFill = document.createElement('span');
+    coverFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+    coverProgress.appendChild(coverFill);
+    coverDiv.appendChild(coverProgress);
+  }
   attachCover(coverDiv, book);
 
   // Corpo do card
-  const bodyDiv = document.createElement('div');
-  bodyDiv.className = 'book-card-body';
+  const bodyDiv = el('div', 'book-card-body');
 
-  const titleH3 = document.createElement('h3');
-  titleH3.className = 'book-title';
+  const titleH3 = el('h3', 'book-title', name);
   titleH3.title = book.display_title ? `${name} (arquivo: ${book.title})` : name;
-  titleH3.textContent = name;
 
-  const metaDiv = document.createElement('div');
-  metaDiv.className = 'book-meta';
-  const sizeSpan = document.createElement('span');
-  sizeSpan.textContent = formatBytes(book.size_bytes ?? book.size ?? 0);
-  const pctSpan = document.createElement('span');
-  pctSpan.className = 'book-pct-label';
-  pctSpan.textContent = pct > 0 ? pctLabel : 'Novo';
-  metaDiv.appendChild(sizeSpan);
+  const metaDiv = el('div', 'book-meta');
+  const pctSpan = el('span', 'book-pct-label');
+  if (pct <= 0) {
+    pctSpan.textContent = 'Novo';
+    pctSpan.classList.add('is-new');
+  } else if (done) {
+    pctSpan.textContent = 'Lido';
+    pctSpan.classList.add('is-done');
+  } else {
+    pctSpan.textContent = inContinue ? `${pctLabel} lido` : pctLabel;
+  }
   metaDiv.appendChild(pctSpan);
+  if (inContinue) {
+    const when = formatLastRead(book.position?.updated_at_ms);
+    if (when) metaDiv.appendChild(el('span', 'book-last-read', when));
+  } else {
+    metaDiv.appendChild(el('span', 'book-size', formatBytes(book.size_bytes ?? book.size ?? 0)));
+  }
 
-  const progressTrack = document.createElement('div');
-  progressTrack.className = 'progress-track';
-  const progressFill = document.createElement('div');
-  progressFill.className = 'progress-fill';
-  progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-  progressTrack.appendChild(progressFill);
+  bodyDiv.append(titleH3, metaDiv);
 
-  bodyDiv.appendChild(titleH3);
-  bodyDiv.appendChild(metaDiv);
-  bodyDiv.appendChild(progressTrack);
+  if (inContinue) {
+    const progressTrack = el('div', 'progress-track');
+    const progressFill = el('div', 'progress-fill');
+    progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+    progressTrack.appendChild(progressFill);
+    const cta = el('span', 'book-continue-cta', 'Continuar');
+    cta.appendChild(createIcon('i-chevron-right'));
+    bodyDiv.append(progressTrack, cta);
+  }
 
-  openBtn.appendChild(coverDiv);
-  openBtn.appendChild(bodyDiv);
+  openBtn.append(coverDiv, bodyDiv);
   card.appendChild(openBtn);
 
-  // Ações rápidas sobre a capa: tirar do "Continuar lendo" (só nessa seção) e menu do livro.
-  const actions = document.createElement('div');
-  actions.className = 'book-card-actions';
-  if (inContinue) {
-    const hideBtn = document.createElement('button');
-    hideBtn.type = 'button';
-    hideBtn.className = 'book-card-action book-continue-hide-btn';
-    hideBtn.title = 'Tirar do Continuar lendo';
-    hideBtn.setAttribute('aria-label', `Tirar ${name} do Continuar lendo`);
-    hideBtn.textContent = '✕';
-    hideBtn.addEventListener('click', async (ev) => {
+  // Ações rápidas: tirar do "Continuar lendo" (só nessa seção), remover cópia local e menu.
+  const actions = el('div', 'book-card-actions');
+  const action = (cls, icon, title, onClick) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `book-card-action ${cls}`;
+    b.title = title;
+    b.appendChild(createIcon(icon));
+    b.addEventListener('click', (ev) => {
       ev.stopPropagation();
+      onClick();
+    });
+    return b;
+  };
+
+  const menuBtn = action('book-menu-btn', 'i-more', 'Editar nome e capa', () => openBookMenu(book));
+  menuBtn.setAttribute('aria-label', `Editar nome e capa de ${name}`);
+  actions.appendChild(menuBtn);
+
+  if (inContinue) {
+    const hideBtn = action('book-continue-hide-btn', 'i-x', 'Tirar do Continuar lendo', async () => {
       try {
         await api.setContinueHidden(book.book_id, true);
         showToast('Tirado do Continuar lendo. Volta sozinho quando você ler de novo.');
@@ -130,39 +175,25 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload, { inContinue 
         showToast(`Não foi possível tirar do Continuar lendo: ${err}`);
       }
     });
+    hideBtn.setAttribute('aria-label', `Tirar ${name} do Continuar lendo`);
     actions.appendChild(hideBtn);
+  } else if (book.downloaded) {
+    const removeBtn = action(
+      'book-remove-dl-btn',
+      'i-trash',
+      'Remover cópia baixada deste aparelho',
+      () => onRemoveDownload(book),
+    );
+    removeBtn.setAttribute('aria-label', `Remover download de ${name}`);
+    actions.appendChild(removeBtn);
   }
-  const menuBtn = document.createElement('button');
-  menuBtn.type = 'button';
-  menuBtn.className = 'book-card-action book-menu-btn';
-  menuBtn.title = 'Editar nome e capa';
-  menuBtn.setAttribute('aria-label', `Editar nome e capa de ${name}`);
-  menuBtn.textContent = '⋯';
-  menuBtn.addEventListener('click', (ev) => {
-    ev.stopPropagation();
-    openBookMenu(book);
-  });
-  actions.appendChild(menuBtn);
   card.appendChild(actions);
+
   // Botão direito (desktop) e toque longo (celular) também abrem o menu.
   card.addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
     openBookMenu(book);
   });
-
-  if (book.downloaded) {
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'book-remove-dl-btn';
-    removeBtn.title = 'Remover cópia baixada deste aparelho';
-    removeBtn.setAttribute('aria-label', `Remover download de ${name}`);
-    removeBtn.textContent = 'Remover cópia local';
-    removeBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      onRemoveDownload(book);
-    });
-    card.appendChild(removeBtn);
-  }
 
   return card;
 }
@@ -171,10 +202,6 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload, { inContinue 
 // para re-renderizar ao navegar sem mexer nos chamadores.
 let currentFolder = '';
 let lastRender = null;
-
-const FOLDER_ICON_SVG =
-  '<svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true" focusable="false">' +
-  '<path fill="currentColor" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4.3c.6 0 1.2.3 1.6.8L12.8 6.5H18.5A2.5 2.5 0 0 1 21 9v8.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></svg>';
 
 function createFolderCardElement(folder, onEnter) {
   const btn = document.createElement('button');
@@ -187,7 +214,7 @@ function createFolderCardElement(folder, onEnter) {
   );
   const icon = document.createElement('span');
   icon.className = 'folder-card-icon';
-  icon.innerHTML = FOLDER_ICON_SVG; // constante estatica, sem dados do servidor
+  icon.appendChild(createIcon('i-folder'));
   const name = document.createElement('span');
   name.className = 'folder-card-name';
   name.textContent = folder.name;
@@ -296,6 +323,12 @@ export function renderLibraryView(books, searchQuery, onOpenBook, onRemoveDownlo
   }
 
   renderBreadcrumb(searching ? '' : currentFolder);
+  const pageTitle = document.getElementById('library-page-title');
+  if (pageTitle) {
+    const crumbs = folderBreadcrumbs(currentFolder);
+    pageTitle.textContent =
+      !searching && crumbs.length > 0 ? crumbs[crumbs.length - 1].name : 'Biblioteca';
+  }
 
   // Seção "Continuar lendo": só na raiz (ou nos resultados de busca)
   if (continueSection && continueGrid) {
@@ -351,16 +384,19 @@ export function updateSyncIndicator(syncState, isStale = false) {
   const pill = document.getElementById('sync-status-pill');
   if (!pill) return;
 
+  let cls = 'sync-offline';
+  let text = isStale ? 'Offline · cache local' : 'Offline';
   if (syncState === 'syncing') {
-    pill.className = 'sync-pill sync-syncing';
-    pill.textContent = '↻ Sincronizando…';
+    cls = 'sync-syncing';
+    text = 'Sincronizando…';
   } else if (syncState === 'connected' && !isStale) {
-    pill.className = 'sync-pill sync-online';
-    pill.textContent = '● Conectado';
-  } else {
-    pill.className = 'sync-pill sync-offline';
-    pill.textContent = isStale ? '○ Offline · cache local' : '○ Offline';
+    cls = 'sync-online';
+    text = 'Conectado';
   }
+  pill.className = `sync-pill ${cls}`;
+  pill.title = text;
+  pill.replaceChildren(el('span', 'sync-dot'), el('span', 'sync-text', text));
+  pill.firstChild.setAttribute('aria-hidden', 'true');
 }
 
 /**
