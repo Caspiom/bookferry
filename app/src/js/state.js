@@ -172,6 +172,114 @@ export function normalizeSearchText(text) {
 }
 
 /**
+ * Nome mostrado na UI: o nome escolhido pelo usuário (`display_title`) ou o título do arquivo.
+ * @param {{ title?: string, display_title?: string|null }} book
+ * @returns {string}
+ */
+export function bookDisplayTitle(book) {
+  const custom = typeof book?.display_title === 'string' ? book.display_title.trim() : '';
+  return custom || String(book?.title || '');
+}
+
+/**
+ * `true` se o usuário tirou o livro de "Continuar lendo" e não leu de novo desde então.
+ * Ler depois de esconder (posição mais nova que o instante de esconder) traz o livro de volta
+ * sozinho; os dois instantes vêm do relógio do servidor, então não dependem do aparelho.
+ * @param {{ hidden_continue_at_ms?: number|null, position?: { updated_at_ms?: number }|null }} book
+ * @returns {boolean}
+ */
+export function isHiddenFromContinue(book) {
+  const hiddenAt = Number(book?.hidden_continue_at_ms) || 0;
+  if (hiddenAt <= 0) return false;
+  const readAt = Number(book?.position?.updated_at_ms) || 0;
+  return readAt <= hiddenAt;
+}
+
+/**
+ * Transforma o nome de um arquivo/título em texto de busca de capa: tira extensão, grupos
+ * entre ()/[]/{} (ex.: "(Digital) [Zone-Empire]"), troca `_` e `.` por espaço.
+ * @param {string} title
+ * @returns {string}
+ */
+export function cleanSearchQuery(title) {
+  return String(title || '')
+    .trim()
+    .replace(/\.(epub|pdf|cbz|cbr|mobi|azw3|fb2)$/i, '')
+    .replace(/[([{][^)\]}]*[)\]}]/g, ' ')
+    .replace(/[_.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export const OPEN_LIBRARY_SEARCH_LIMIT = 12;
+
+/** URL de busca do Open Library (sem chave de API). */
+export function openLibrarySearchUrl(query) {
+  const params = new URLSearchParams({
+    q: String(query || '').trim(),
+    limit: String(OPEN_LIBRARY_SEARCH_LIMIT),
+    fields: 'key,title,author_name,cover_i,first_publish_year',
+  });
+  return `https://openlibrary.org/search.json?${params.toString()}`;
+}
+
+/**
+ * URL da imagem de capa. `size`: `S`, `M` ou `L`. `default=false` faz o servidor responder 404
+ * quando não há capa (em vez de uma imagem de 1 px).
+ * @param {number|string} coverId
+ * @param {'S'|'M'|'L'} size
+ * @returns {string}
+ */
+export function openLibraryCoverUrl(coverId, size = 'M') {
+  const id = Number(coverId);
+  const s = size === 'S' || size === 'L' ? size : 'M';
+  if (!Number.isInteger(id) || id <= 0) return '';
+  return `https://covers.openlibrary.org/b/id/${id}-${s}.jpg?default=false`;
+}
+
+/**
+ * Lê a resposta do Open Library: só obras com capa, sem capas repetidas.
+ * @param {unknown} json
+ * @returns {Array<{ coverId: number, title: string, author: string, year: number|null }>}
+ */
+export function parseOpenLibraryResults(json) {
+  const docs = Array.isArray(json?.docs) ? json.docs : [];
+  const seen = new Set();
+  const out = [];
+  for (const d of docs) {
+    const coverId = Number(d?.cover_i);
+    if (!Number.isInteger(coverId) || coverId <= 0 || seen.has(coverId)) continue;
+    seen.add(coverId);
+    out.push({
+      coverId,
+      title: String(d.title || '').trim() || 'Sem título',
+      author: Array.isArray(d.author_name) ? String(d.author_name[0] || '').trim() : '',
+      year: Number.isInteger(d.first_publish_year) ? d.first_publish_year : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Menor retângulo que cabe em `maxW`×`maxH` mantendo a proporção; nunca amplia.
+ * @param {number} w
+ * @param {number} h
+ * @param {number} maxW
+ * @param {number} maxH
+ * @returns {{ width: number, height: number }}
+ */
+export function fitWithin(w, h, maxW, maxH) {
+  const sw = Number(w);
+  const sh = Number(h);
+  if (!(sw > 0) || !(sh > 0)) return { width: 0, height: 0 };
+  const scale = Math.min(1, maxW / sw, maxH / sh);
+  return {
+    width: Math.max(1, Math.round(sw * scale)),
+    height: Math.max(1, Math.round(sh * scale)),
+  };
+}
+
+/**
  * Filtra livros por título e separa a lista de "Continuar lendo"
  * (ordenada decrescentemente por `position.updated_at_ms`).
  * @param {Array<object>} books
@@ -182,18 +290,24 @@ export function filterAndSortLibrary(books, query = '') {
   const list = Array.isArray(books) ? books : [];
   const normQuery = normalizeSearchText(query);
 
+  // A busca acha tanto pelo nome escolhido quanto pelo nome original do arquivo.
   const filteredBooks = list
     .filter((b) => {
       if (!normQuery) return true;
-      return normalizeSearchText(b.title).includes(normQuery);
+      return (
+        normalizeSearchText(bookDisplayTitle(b)).includes(normQuery) ||
+        normalizeSearchText(b.title).includes(normQuery)
+      );
     })
     .slice()
-    .sort((a, b) => naturalCompare(a.title || '', b.title || ''));
+    .sort((a, b) => naturalCompare(bookDisplayTitle(a), bookDisplayTitle(b)));
 
   const continueReading = filteredBooks
     .filter((b) => {
       const pos = b.position;
-      return pos && Number(pos.updated_at_ms) > 0 && Number(pos.percent) > 0;
+      return (
+        pos && Number(pos.updated_at_ms) > 0 && Number(pos.percent) > 0 && !isHiddenFromContinue(b)
+      );
     })
     .slice()
     .sort((a, b) => Number(b.position.updated_at_ms) - Number(a.position.updated_at_ms));

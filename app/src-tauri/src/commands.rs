@@ -119,6 +119,10 @@ pub struct BookViewDto {
     pub mtime_ms: u64,
     pub folder: String,
     pub downloaded: bool,
+    pub display_title: Option<String>,
+    pub cover_version: u64,
+    pub cover_source: Option<String>,
+    pub hidden_continue_at_ms: Option<u64>,
     pub position: Option<PositionRecord>,
 }
 
@@ -581,6 +585,10 @@ pub async fn library(state: tauri::State<'_, Arc<AppState>>) -> Result<LibraryVi
                 mtime_ms: b.mtime_ms,
                 folder: b.folder,
                 downloaded,
+                display_title: b.display_title,
+                cover_version: b.cover_version,
+                cover_source: b.cover_source,
+                hidden_continue_at_ms: b.hidden_continue_at_ms,
                 position: b.position,
             }
         })
@@ -589,6 +597,127 @@ pub async fn library(state: tauri::State<'_, Arc<AppState>>) -> Result<LibraryVi
         books,
         stale: snap.stale,
     })
+}
+
+/// Resposta das escritas de metadados (nome, capa, "Continuar lendo").
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BookMetaDto {
+    pub book_id: String,
+    pub display_title: Option<String>,
+    pub cover_version: u64,
+    pub cover_source: Option<String>,
+    pub hidden_continue_at_ms: Option<u64>,
+    /// `false` quando uma capa automatica foi ignorada por ja existir capa escolhida pelo usuario.
+    pub applied: bool,
+}
+
+impl BookMetaDto {
+    fn from_meta(meta: bookferry_client::BookMeta, applied: bool) -> Self {
+        Self {
+            book_id: meta.book_id,
+            display_title: meta.display_title,
+            cover_version: meta.cover_version,
+            cover_source: meta.cover_source,
+            hidden_continue_at_ms: meta.hidden_continue_at_ms,
+            applied,
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn set_display_title(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    title: Option<String>,
+) -> Result<BookMetaDto, String> {
+    let meta = state
+        .client
+        .set_display_title(&book_id, title.as_deref())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(BookMetaDto::from_meta(meta, true))
+}
+
+#[tauri::command]
+pub async fn set_continue_hidden(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    hidden: bool,
+) -> Result<BookMetaDto, String> {
+    let meta = state
+        .client
+        .set_continue_hidden(&book_id, hidden)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(BookMetaDto::from_meta(meta, true))
+}
+
+/// Envia a capa de um livro. `source`: `embedded` (gerada do arquivo), `custom` (imagem do
+/// usuario) ou `web` (buscada na internet por escolha do usuario).
+#[tauri::command]
+pub async fn set_book_cover(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+    source: String,
+    image: Vec<u8>,
+) -> Result<BookMetaDto, String> {
+    let source = match source.as_str() {
+        "embedded" => bookferry_client::CoverSource::Embedded,
+        "custom" => bookferry_client::CoverSource::Custom,
+        "web" => bookferry_client::CoverSource::Web,
+        other => return Err(format!("origem de capa invalida: {other}")),
+    };
+    let (applied, meta) = state
+        .client
+        .set_cover(&book_id, source, image)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(BookMetaDto::from_meta(meta, applied))
+}
+
+#[tauri::command]
+pub async fn remove_book_cover(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+) -> Result<BookMetaDto, String> {
+    let meta = state
+        .client
+        .remove_cover(&book_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(BookMetaDto::from_meta(meta, true))
+}
+
+/// Garante a capa no disco (baixa se preciso) e devolve a URL do protocolo local, ou `None`
+/// se o livro nao tem capa ou ela nao esta disponivel agora (offline e nunca baixada).
+#[tauri::command]
+pub async fn ensure_cover(
+    state: tauri::State<'_, Arc<AppState>>,
+    book_id: String,
+) -> Result<Option<String>, String> {
+    let version = match state.client.cover_path(&book_id).await {
+        Ok(Some(path)) => path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.rsplit_once('-'))
+            .map(|(_, v)| v.to_string()),
+        Ok(None) => None,
+        Err(e) if e.is_transient() => None,
+        Err(e) => return Err(e.to_string()),
+    };
+    Ok(version.map(|v| format!("{}/covers/{book_id}/{v}", current_protocol_base_url())))
+}
+
+/// Ids de livros sem capa no servidor (o app gera a embutida para eles em segundo plano).
+#[tauri::command]
+pub async fn list_books_without_cover(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Vec<String>, String> {
+    state
+        .client
+        .books_without_cover()
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

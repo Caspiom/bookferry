@@ -1368,3 +1368,143 @@ select:focus-visible {
   height: 3px;
   border-radius: 0;
 }
+
+/* Capa, nome e menu por livro */
+.book-card {
+  position: relative;
+}
+
+.book-cover {
+  overflow: hidden;
+}
+
+.book-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.book-cover.has-cover-image .book-cover-initial {
+  visibility: hidden;
+}
+
+.book-card-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+.book-card-action {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background-color: rgba(15, 23, 42, 0.72);
+  color: #ffffff;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.book-card-action:hover,
+.book-card-action:focus-visible {
+  background-color: rgba(15, 23, 42, 0.92);
+}
+
+.book-menu-card {
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.book-menu-card .field-label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.book-menu-cover-row {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-top: 16px;
+}
+
+.book-menu-cover-preview {
+  position: relative;
+  flex: 0 0 84px;
+  height: 126px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.book-menu-cover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  flex: 1;
+}
+
+.book-menu-web {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.book-menu-web-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.book-menu-web-result {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-elevated);
+}
+
+.book-menu-web-result:hover,
+.book-menu-web-result:focus-visible {
+  border-color: var(--accent-primary);
+}
+
+.book-menu-web-result img {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  background-color: var(--bg-surface);
+}
+
+.book-menu-web-result span {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.book-menu-footer {
+  margin-top: 18px;
+}

@@ -88,6 +88,14 @@ export const api = {
   rotatePairingQr: () => invokeCommand('rotate_pairing_qr'),
   listPairedDevices: () => invokeCommand('list_paired_devices'),
   revokePairedDevice: (deviceId) => invokeCommand('revoke_paired_device', { deviceId }),
+  // Nome, capa e "Continuar lendo" por livro (sincronizados entre aparelhos pelo servidor)
+  setDisplayTitle: (bookId, title) => invokeCommand('set_display_title', { bookId, title }),
+  setContinueHidden: (bookId, hidden) => invokeCommand('set_continue_hidden', { bookId, hidden }),
+  setBookCover: (bookId, source, imageBytes) =>
+    invokeCommand('set_book_cover', { bookId, source, image: Array.from(imageBytes) }),
+  removeBookCover: (bookId) => invokeCommand('remove_book_cover', { bookId }),
+  ensureCover: (bookId) => invokeCommand('ensure_cover', { bookId }),
+  listBooksWithoutCover: () => invokeCommand('list_books_without_cover'),
   // Preferências de leitura (por livro, padrão global, presets e linha de progresso)
   getReaderPrefs: (bookId) => invokeCommand('get_reader_prefs', { bookId }),
   saveReaderPrefs: (bookId, prefs) => invokeCommand('save_reader_prefs', { bookId, prefs }),

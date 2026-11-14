@@ -2,6 +2,7 @@
 
 import { api, listenClientEvents, setProtocolBaseUrl } from './api.js';
 import {
+  navigateToFolder,
   prepareBookToOpen,
   renderLibraryView,
   updateSyncIndicator,
@@ -9,9 +10,11 @@ import {
 import { mountCbzReader } from './readers/cbz.js';
 import { mountEpubReader } from './readers/epub.js';
 import { mountPdfReader } from './readers/pdf.js';
+import { updateBookMenu } from './book-menu.js';
+import { generateCoverIfMissing, generateMissingCovers, resizeImageToJpeg } from './covers.js';
 import { createReaderChrome } from './reader-chrome.js';
 import { createProgressBar, mountAaPanel, setReaderChromeTheme } from './reader-ui.js';
-import { formatBytes, formatPercent, sanitizeProgressPrefs } from './state.js';
+import { bookDisplayTitle, formatBytes, formatPercent, sanitizeProgressPrefs } from './state.js';
 import {
   applyTheme,
   downloadModal,
@@ -110,6 +113,11 @@ export async function refreshLibrary(showSyncSpinner = true) {
       (book) => openBookFlow(book),
       (book) => removeBookDownloadFlow(book),
     );
+    // Só o desktop gera capas em segundo plano (tem o servidor e fica ligado); o celular gera
+    // a capa de um livro quando o abre. Um livro por vez, sem travar a tela.
+    if (appState.status?.platform === 'desktop' && !view?.stale) {
+      generateMissingCovers(() => appState.books);
+    }
   } catch (err) {
     updateSyncIndicator('offline', true);
     showToast(`Erro ao carregar biblioteca: ${err}`);
@@ -119,7 +127,7 @@ export async function refreshLibrary(showSyncSpinner = true) {
 async function removeBookDownloadFlow(book) {
   try {
     await api.removeDownload(book.book_id);
-    showToast(`Cópia local de "${book.title}" removida.`);
+    showToast(`Cópia local de "${bookDisplayTitle(book)}" removida.`);
     await refreshLibrary(false);
   } catch (err) {
     showToast(`Erro ao remover download: ${err}`);
@@ -198,7 +206,9 @@ export async function openBookFlow(book) {
   const viewportEl = document.getElementById('reader-viewport');
   const tocListEl = document.getElementById('toc-list');
 
-  if (titleEl) titleEl.textContent = readyBook.title;
+  if (titleEl) titleEl.textContent = bookDisplayTitle(readyBook);
+  // Abriu um livro sem capa: já está baixado, então gera a capa embutida sem esperar.
+  generateCoverIfMissing(idx >= 0 ? appState.books[idx] : readyBook);
   if (statusLabelEl) statusLabelEl.textContent = 'Abrindo...';
   document.getElementById('toc-drawer')?.classList.add('hidden');
 
@@ -594,6 +604,34 @@ async function setupClientEventStream() {
       refreshStatus().then(() => {
         showScreen('pairing-screen');
       });
+    } else if (ev.BookMetaChanged) {
+      const { book_id: bookId, meta } = ev.BookMetaChanged;
+      const idx = appState.books.findIndex((b) => b.book_id === bookId);
+      if (idx < 0 || !meta) return;
+      appState.books[idx] = {
+        ...appState.books[idx],
+        display_title: meta.display_title ?? null,
+        cover_version: Number(meta.cover_version) || 0,
+        cover_source: meta.cover_source ?? null,
+        hidden_continue_at_ms: meta.hidden_continue_at_ms ?? null,
+      };
+      updateBookMenu(appState.books[idx]);
+      // "Restaurar capa original" (aqui ou em outro aparelho): o desktop gera a embutida de novo.
+      if (appState.status?.platform === 'desktop' && appState.books[idx].cover_version === 0) {
+        generateMissingCovers(() => appState.books);
+      }
+      if (appState.activeBook?.book_id === bookId) {
+        const titleEl = document.getElementById('reader-book-title');
+        if (titleEl) titleEl.textContent = bookDisplayTitle(appState.books[idx]);
+      }
+      if (!appState.activeBook) {
+        renderLibraryView(
+          appState.books,
+          appState.searchQuery,
+          (book) => openBookFlow(book),
+          (book) => removeBookDownloadFlow(book),
+        );
+      }
     } else if (ev.PositionChanged) {
       const { book_id: bookId, position: pos } = ev.PositionChanged;
       if (!pos) return;
@@ -1095,6 +1133,149 @@ async function runE2eAutomation() {
     };
     if (results.steps.after_close_reader.immersive || results.steps.after_close_reader.chrome_theme) {
       throw new Error(`Leitor fechado não restaurou a interface: ${JSON.stringify(results.steps.after_close_reader)}`);
+    }
+
+    // 2b. Capas, nome de exibição e "Continuar lendo" (tudo pelo caminho real: servidor, cliente,
+    // protocolo local e DOM).
+    {
+      const cv = {};
+      const problems = [];
+      const waitFor = async (pred, ms = 15000) => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < ms) {
+          if (pred()) return true;
+          await sleep(150);
+        }
+        return false;
+      };
+      const byId = (id) => appState.books.find((b) => b.book_id === id);
+      const cardIn = (sel, id) => document.querySelector(`${sel} .book-card[data-book-id="${id}"]`);
+
+      // Capas embutidas geradas em segundo plano (CBZ: página 1; PDF: renderiza a página 1).
+      cv.embedded_generated = await waitFor(
+        () => Number(byId(cbzBook.book_id)?.cover_version) > 0 && Number(byId(pdfBook.book_id)?.cover_version) > 0,
+      );
+      if (!cv.embedded_generated) problems.push('capas embutidas não foram geradas');
+      cv.epub_cover_version = Number(byId(epubBook.book_id)?.cover_version) || 0;
+
+      // O protocolo local serve a capa como JPEG de verdade, pequena.
+      const coverUrl = await api.ensureCover(cbzBook.book_id);
+      const resp = await fetch(coverUrl);
+      const blob = await resp.blob();
+      cv.cbz_cover_http = { status: resp.status, type: blob.type, size: blob.size };
+      if (resp.status !== 200 || blob.type !== 'image/jpeg' || blob.size < 100 || blob.size > 400000) {
+        problems.push('capa do CBZ não foi servida como JPEG pequeno');
+      }
+      const bmp = await createImageBitmap(blob);
+      cv.cbz_cover_px = `${bmp.width}x${bmp.height}`;
+      if (bmp.width > 360 || bmp.height > 540) problems.push('capa maior que 360x540');
+
+      // O card do PDF mostra a imagem (pasta do livro) e depois volta à raiz.
+      navigateToFolder(pdfBook.folder || '');
+      await sleep(200);
+      const pdfCardSel = `.book-card[data-book-id="${pdfBook.book_id}"] img.book-cover-img`;
+      cv.pdf_card_image = await waitFor(() => {
+        const img = document.querySelector(pdfCardSel);
+        return Boolean(img && img.complete && img.naturalWidth > 0);
+      }, 8000);
+      if (!cv.pdf_card_image) problems.push('card do PDF sem imagem de capa');
+      results.screenshots.push(await api.e2eCaptureScreenshot('12-covers'));
+
+      // Nome de exibição: aparece no card, o original fica no `title`, e limpar volta ao original.
+      await api.setDisplayTitle(pdfBook.book_id, '  Meu   PDF  Teste ');
+      const titleSel = `.book-card[data-book-id="${pdfBook.book_id}"] .book-title`;
+      cv.title_shown = await waitFor(
+        () => document.querySelector(titleSel)?.textContent === 'Meu PDF Teste',
+        6000,
+      );
+      if (!cv.title_shown) problems.push('nome de exibição não apareceu no card');
+      if (byId(pdfBook.book_id)?.title !== pdfBook.title) problems.push('título original foi alterado');
+      await api.setDisplayTitle(pdfBook.book_id, null);
+      cv.title_restored = await waitFor(
+        () => document.querySelector(titleSel)?.textContent === pdfBook.title,
+        6000,
+      );
+      if (!cv.title_restored) problems.push('nome original não voltou');
+      navigateToFolder('');
+      await sleep(200);
+
+      // Imagem própria: vence a capa embutida; embutida nova é ignorada; restaurar regera.
+      const png = document.createElement('canvas');
+      png.width = 800;
+      png.height = 1200;
+      const pctx = png.getContext('2d');
+      pctx.fillStyle = '#c0392b';
+      pctx.fillRect(0, 0, 800, 1200);
+      const pngBlob = await new Promise((r) => png.toBlob(r, 'image/png'));
+      const customBytes = await resizeImageToJpeg(pngBlob);
+      const before = Number(byId(cbzBook.book_id).cover_version);
+      const custom = await api.setBookCover(cbzBook.book_id, 'custom', customBytes);
+      cv.custom_cover = { applied: custom.applied, source: custom.cover_source, bumped: custom.cover_version > before };
+      const ignored = await api.setBookCover(cbzBook.book_id, 'embedded', customBytes);
+      cv.embedded_ignored = ignored.applied === false && ignored.cover_source === 'custom';
+      if (!custom.applied || custom.cover_source !== 'custom' || !(custom.cover_version > before)) {
+        problems.push('capa própria não foi aplicada');
+      }
+      if (!cv.embedded_ignored) problems.push('capa embutida sobrescreveu a do usuário');
+      await api.removeBookCover(cbzBook.book_id);
+      await refreshLibrary(false); // dispara a geração em segundo plano da capa original
+      cv.original_regenerated = await waitFor(() => {
+        const b = byId(cbzBook.book_id);
+        return Number(b?.cover_version) > 0 && b?.cover_source === 'embedded';
+      }, 15000);
+      if (!cv.original_regenerated) problems.push('capa original não foi regerada após restaurar');
+
+      // Tirar do Continuar lendo: some da seção mas continua na biblioteca; ler de novo traz de volta.
+      const inContinue = () => Boolean(cardIn('#continue-reading-grid', epubBook.book_id));
+      cv.continue_has_epub = await waitFor(inContinue, 5000);
+      if (!cv.continue_has_epub) problems.push('livro lido não está em Continuar lendo');
+      cardIn('#continue-reading-grid', epubBook.book_id)
+        ?.querySelector('.book-continue-hide-btn')
+        ?.click();
+      cv.hidden_from_continue = await waitFor(() => !inContinue(), 6000);
+      if (!cv.hidden_from_continue) problems.push('botão ✕ não tirou do Continuar lendo');
+      cv.still_in_library = Boolean(byId(epubBook.book_id)) && byId(epubBook.book_id).position?.percent > 0;
+      if (!cv.still_in_library) problems.push('livro sumiu da biblioteca ou perdeu o progresso');
+      results.screenshots.push(await api.e2eCaptureScreenshot('13-continue-hidden'));
+      await sleep(80);
+      const pos = await api.getPosition(epubBook.book_id);
+      await api.setPosition(epubBook.book_id, pos.locator, pos.percent, pos.snippet);
+      cv.back_after_reading = await waitFor(inContinue, 8000);
+      if (!cv.back_after_reading) problems.push('livro não voltou ao Continuar lendo depois de ler');
+
+      // Modal "Editar livro": abre pelo botão ⋯, renomeia pelo campo, mostra a busca com o texto
+      // já limpo e fecha com Esc (a busca em si depende da internet, então não é exigida aqui).
+      navigateToFolder(pdfBook.folder || '');
+      await sleep(250);
+      document.querySelector(`.book-card[data-book-id="${pdfBook.book_id}"] .book-menu-btn`)?.click();
+      await sleep(200);
+      const modal = document.getElementById('book-menu-modal');
+      cv.menu_open = Boolean(modal && !modal.classList.contains('hidden'));
+      if (!cv.menu_open) problems.push('modal Editar livro não abriu');
+      const nameInput = document.getElementById('book-menu-name');
+      nameInput.value = 'Nome pelo modal';
+      document.getElementById('book-menu-name-save').click();
+      cv.menu_rename = await waitFor(
+        () => document.querySelector(titleSel)?.textContent === 'Nome pelo modal',
+        6000,
+      );
+      if (!cv.menu_rename) problems.push('renomear pelo modal não refletiu no card');
+      document.getElementById('book-menu-web-search').click();
+      await sleep(300);
+      cv.web_query = document.getElementById('book-menu-web-query').value;
+      if (cv.web_query !== 'Nome pelo modal') problems.push('busca web sem o texto do livro');
+      results.screenshots.push(await api.e2eCaptureScreenshot('14-book-menu'));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await sleep(200);
+      cv.menu_closed_by_esc = modal.classList.contains('hidden');
+      if (!cv.menu_closed_by_esc) problems.push('Esc não fechou o modal');
+      await api.setDisplayTitle(pdfBook.book_id, null);
+      navigateToFolder('');
+      await sleep(200);
+
+      results.steps.covers_title_continue = cv;
+      if (problems.length) throw new Error(`Capas/nome/continuar: ${problems.join('; ')} :: ${JSON.stringify(cv)}`);
     }
 
     // 3. Fluxo Resume Ask Modal + Leitor PDF:

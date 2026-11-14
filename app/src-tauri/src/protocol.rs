@@ -52,6 +52,8 @@ struct CachedCbzPage {
 #[derive(Clone)]
 pub struct ProtocolHandler {
     books_dir: PathBuf,
+    /// Pasta das capas baixadas (`<book_id>-<versao>`); `None` desliga a rota `/covers/...`.
+    covers_dir: Option<PathBuf>,
     max_cbz_entry_bytes: u64,
     cbz_index_cache: Arc<Mutex<HashMap<String, CachedCbzIndex>>>,
     cbz_page_cache: Arc<Mutex<VecDeque<CachedCbzPage>>>,
@@ -68,12 +70,19 @@ impl ProtocolHandler {
     ) -> Self {
         Self {
             books_dir: books_dir.into(),
+            covers_dir: None,
             max_cbz_entry_bytes: max_cbz_entry_bytes.max(1024),
             cbz_index_cache: Arc::new(Mutex::new(HashMap::new())),
             cbz_page_cache: Arc::new(Mutex::new(VecDeque::with_capacity(
                 CBZ_PAGE_CACHE_MAX_ITEMS,
             ))),
         }
+    }
+
+    /// Habilita `GET /covers/<book_id>/<versao>` servindo `dir/<book_id>-<versao>`.
+    pub fn with_covers_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.covers_dir = Some(dir.into());
+        self
     }
 
     pub fn books_dir(&self) -> &Path {
@@ -120,6 +129,9 @@ impl ProtocolHandler {
             ["books", raw_book_id] | ["book", raw_book_id] => {
                 self.serve_book_file(raw_book_id, method == Method::HEAD, req.headers())
             }
+            ["covers", raw_book_id, raw_version] => {
+                self.serve_cover(raw_book_id, raw_version, method == Method::HEAD)
+            }
             ["cbz", raw_book_id, "page", raw_index] => {
                 self.serve_cbz_page(raw_book_id, raw_index, method == Method::HEAD)
             }
@@ -139,6 +151,60 @@ impl ProtocolHandler {
             (Some(Component::Normal(_)), None) => Some(self.books_dir.join(book_id.as_str())),
             _ => None,
         }
+    }
+
+    /// Serve uma capa ja baixada pelo cliente. So `BookId` valido + versao numerica viram nome de
+    /// arquivo (nada de `..`), e o tipo vem dos bytes (nunca da extensao).
+    fn serve_cover(
+        &self,
+        raw_book_id: &str,
+        raw_version: &str,
+        is_head: bool,
+    ) -> Response<Vec<u8>> {
+        let (Ok(book_id), true) = (
+            BookId::parse(raw_book_id),
+            !raw_version.is_empty() && raw_version.bytes().all(|b| b.is_ascii_digit()),
+        ) else {
+            return build_json_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_cover",
+                "Identificador de capa invalido",
+                &[],
+            );
+        };
+        let not_found = || {
+            build_json_error(
+                StatusCode::NOT_FOUND,
+                "cover_not_found",
+                "Capa nao encontrada neste aparelho",
+                &[],
+            )
+        };
+        let Some(dir) = self.covers_dir.as_ref() else {
+            return not_found();
+        };
+        let Ok(bytes) = std::fs::read(dir.join(format!("{}-{raw_version}", book_id.as_str())))
+        else {
+            return not_found();
+        };
+        let content_type = match bytes.as_slice() {
+            [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+            [0x89, b'P', b'N', b'G', ..] => "image/png",
+            b if b.len() >= 12 && &b[0..4] == b"RIFF" && &b[8..12] == b"WEBP" => "image/webp",
+            _ => return not_found(),
+        };
+        let len = bytes.len().to_string();
+        build_cors_response(
+            StatusCode::OK,
+            content_type,
+            if is_head { Vec::new() } else { bytes },
+            &[
+                ("content-length", &len),
+                // A versao esta na URL: o conteudo daquela URL nunca muda.
+                ("cache-control", "private, max-age=31536000, immutable"),
+                ("x-content-type-options", "nosniff"),
+            ],
+        )
     }
 
     fn serve_book_file(
@@ -1030,5 +1096,69 @@ mod tests {
             let resp_bad_idx = handler.handle_request(&req_bad_idx);
             assert_eq!(resp_bad_idx.status(), StatusCode::BAD_REQUEST);
         }
+    }
+
+    #[test]
+    fn covers_are_served_by_id_and_version_with_type_from_bytes() {
+        let books = TempDir::new().unwrap();
+        let covers = TempDir::new().unwrap();
+        let id = "d41d8cd98f00b204e9800998ecf8427e-100";
+        std::fs::write(
+            covers.path().join(format!("{id}-7")),
+            [0xFF, 0xD8, 0xFF, 0xE0, 1, 2],
+        )
+        .unwrap();
+        std::fs::write(
+            covers.path().join(format!("{id}-8")),
+            b"<svg onload=alert(1)/>",
+        )
+        .unwrap();
+        let handler = ProtocolHandler::new(books.path()).with_covers_dir(covers.path());
+        let get = |uri: &str| {
+            let req = Request::builder()
+                .method(Method::GET)
+                .uri(uri)
+                .body(Vec::new())
+                .unwrap();
+            handler.handle_request(&req)
+        };
+
+        let ok = get(&format!("bookferry://localhost/covers/{id}/7"));
+        assert_eq!(ok.status(), StatusCode::OK);
+        assert_eq!(
+            ok.headers().get(header::CONTENT_TYPE).unwrap(),
+            "image/jpeg"
+        );
+        assert_eq!(ok.body(), &vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2]);
+        // Arquivo que nao e imagem nunca e servido, mesmo existindo.
+        assert_eq!(
+            get(&format!("bookferry://localhost/covers/{id}/8")).status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            get(&format!("bookferry://localhost/covers/{id}/9")).status(),
+            StatusCode::NOT_FOUND
+        );
+        for bad in [
+            "bookferry://localhost/covers/../../etc/passwd/1".to_string(),
+            format!("bookferry://localhost/covers/{id}/7..%2f..%2fsecret"),
+            format!("bookferry://localhost/covers/{id}/abc"),
+            format!("bookferry://localhost/covers/{id}/"),
+            "bookferry://localhost/covers/ZZZ/1".to_string(),
+        ] {
+            let st = get(&bad).status();
+            assert!(
+                st == StatusCode::BAD_REQUEST || st == StatusCode::NOT_FOUND,
+                "{bad}: {st}"
+            );
+        }
+        // Sem `covers_dir` configurado a rota responde 404.
+        let plain = ProtocolHandler::new(books.path());
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(format!("bookferry://localhost/covers/{id}/7"))
+            .body(Vec::new())
+            .unwrap();
+        assert_eq!(plain.handle_request(&req).status(), StatusCode::NOT_FOUND);
     }
 }

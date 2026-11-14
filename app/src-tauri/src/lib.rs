@@ -94,7 +94,7 @@ pub fn run() {
             let client = tauri::async_runtime::block_on(Client::open(client_cfg))
                 .map_err(|e| format!("falha ao abrir bookferry-client: {e}"))?;
 
-            let protocol = ProtocolHandler::new(&books_dir);
+            let protocol = ProtocolHandler::new(&books_dir).with_covers_dir(data_dir.join("covers"));
 
             let state = Arc::new(AppState {
                 data_dir: data_dir.clone(),
@@ -182,6 +182,12 @@ pub fn run() {
         commands::save_progress_prefs,
         commands::set_fullscreen,
         commands::is_fullscreen,
+        commands::set_display_title,
+        commands::set_continue_hidden,
+        commands::set_book_cover,
+        commands::remove_book_cover,
+        commands::ensure_cover,
+        commands::list_books_without_cover,
     ]);
 
     #[cfg(bookferry_e2e)]
@@ -213,6 +219,12 @@ pub fn run() {
         commands::save_progress_prefs,
         commands::set_fullscreen,
         commands::is_fullscreen,
+        commands::set_display_title,
+        commands::set_continue_hidden,
+        commands::set_book_cover,
+        commands::remove_book_cover,
+        commands::ensure_cover,
+        commands::list_books_without_cover,
         commands::e2e_pair_second_client,
         commands::e2e_wait_peer_position,
         commands::e2e_peer_set_position,

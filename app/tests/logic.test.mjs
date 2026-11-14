@@ -6,6 +6,13 @@ import {
   BUILTIN_PRESETS,
   DEFAULT_READER_PREFS,
   applyPresetToPrefs,
+  bookDisplayTitle,
+  cleanSearchQuery,
+  openLibraryCoverUrl,
+  openLibrarySearchUrl,
+  parseOpenLibraryResults,
+  fitWithin,
+  isHiddenFromContinue,
   buildEpubCss,
   buildFolderView,
   computeSingleSpreads,
@@ -616,5 +623,105 @@ describe('Quadrinhos: modo, layout, pan e zoom', () => {
     assert.equal(zoomTranslateForPoint({ ...base, px: 0, py: 0 }).tx, 750);
     assert.equal(zoomTranslateForPoint({ ...base, px: 0, py: 0 }).ty, 600);
     assert.deepEqual(zoomTranslateForPoint({ ...base, px: 900, py: 100, toScale: 1 }), { tx: 0, ty: 0 });
+  });
+});
+
+describe('nome, capa e Continuar lendo por livro', () => {
+  const pos = (updated, percent = 10) => ({ updated_at_ms: updated, percent });
+
+  it('bookDisplayTitle usa o nome escolhido, ignora vazio/espaços e cai no título', () => {
+    assert.equal(bookDisplayTitle({ title: 'arq', display_title: '  Meu nome ' }), 'Meu nome');
+    assert.equal(bookDisplayTitle({ title: 'arq', display_title: '   ' }), 'arq');
+    assert.equal(bookDisplayTitle({ title: 'arq', display_title: null }), 'arq');
+    assert.equal(bookDisplayTitle({ title: 'arq' }), 'arq');
+    assert.equal(bookDisplayTitle(null), '');
+  });
+
+  it('isHiddenFromContinue: escondido só até a próxima leitura (relógio do servidor)', () => {
+    assert.equal(isHiddenFromContinue({ position: pos(100) }), false);
+    assert.equal(isHiddenFromContinue({ hidden_continue_at_ms: 0, position: pos(100) }), false);
+    assert.equal(isHiddenFromContinue({ hidden_continue_at_ms: 500, position: pos(100) }), true);
+    // leitura exatamente no instante de esconder ainda conta como "antes"
+    assert.equal(isHiddenFromContinue({ hidden_continue_at_ms: 500, position: pos(500) }), true);
+    assert.equal(isHiddenFromContinue({ hidden_continue_at_ms: 500, position: pos(501) }), false);
+    assert.equal(isHiddenFromContinue({ hidden_continue_at_ms: 500 }), true);
+  });
+
+  it('filterAndSortLibrary: some do Continuar lendo mas continua na biblioteca; volta ao ler', () => {
+    const books = [
+      { book_id: 'a', title: 'Alfa', hidden_continue_at_ms: 900, position: pos(800) },
+      { book_id: 'b', title: 'Beta', position: pos(700) },
+      { book_id: 'c', title: 'Gama', hidden_continue_at_ms: 900, position: pos(1000) },
+    ];
+    const { continueReading, filteredBooks } = filterAndSortLibrary(books, '');
+    assert.deepEqual(continueReading.map((b) => b.book_id), ['c', 'b']);
+    assert.equal(filteredBooks.length, 3, 'o livro escondido continua na biblioteca');
+  });
+
+  it('filterAndSortLibrary: busca e ordem usam o nome escolhido, e ainda acham o original', () => {
+    const books = [
+      { book_id: 'a', title: 'zzz-scan-001', display_title: 'Alan Moore - Watchmen' },
+      { book_id: 'b', title: 'Batman' },
+    ];
+    const byCustom = filterAndSortLibrary(books, 'watchmen').filteredBooks;
+    assert.deepEqual(byCustom.map((b) => b.book_id), ['a']);
+    const byOriginal = filterAndSortLibrary(books, 'ZZZ-scan').filteredBooks;
+    assert.deepEqual(byOriginal.map((b) => b.book_id), ['a']);
+    assert.deepEqual(filterAndSortLibrary(books, '').filteredBooks.map((b) => b.book_id), ['a', 'b']);
+  });
+
+  it('fitWithin reduz mantendo proporção, nunca amplia e trata entradas inválidas', () => {
+    assert.deepEqual(fitWithin(1000, 2000, 360, 540), { width: 270, height: 540 });
+    assert.deepEqual(fitWithin(2000, 1000, 360, 540), { width: 360, height: 180 });
+    assert.deepEqual(fitWithin(100, 150, 360, 540), { width: 100, height: 150 });
+    assert.deepEqual(fitWithin(0, 100, 360, 540), { width: 0, height: 0 });
+    assert.deepEqual(fitWithin(NaN, 100, 360, 540), { width: 0, height: 0 });
+    assert.deepEqual(fitWithin(1, 100000, 360, 540), { width: 1, height: 540 });
+  });
+});
+
+describe('busca de capa na internet (Open Library)', () => {
+  it('cleanSearchQuery tira extensão, grupos e separadores de nome de arquivo', () => {
+    assert.equal(cleanSearchQuery('Swamp_Thing.v01 (2016) (Digital) [Zone-Empire].cbz'), 'Swamp Thing v01');
+    assert.equal(cleanSearchQuery('  Dom Casmurro.epub '), 'Dom Casmurro');
+    assert.equal(cleanSearchQuery('Livro (sem fechar'), 'Livro (sem fechar');
+    assert.equal(cleanSearchQuery('[Grupo] Obra'), 'Obra');
+    assert.equal(cleanSearchQuery('(tudo entre parênteses)'), '');
+    assert.equal(cleanSearchQuery(null), '');
+  });
+
+  it('openLibrarySearchUrl codifica a consulta e limita campos', () => {
+    const url = new URL(openLibrarySearchUrl('a&b=c ção'));
+    assert.equal(url.origin, 'https://openlibrary.org');
+    assert.equal(url.pathname, '/search.json');
+    assert.equal(url.searchParams.get('q'), 'a&b=c ção');
+    assert.equal(url.searchParams.get('limit'), '12');
+    assert.match(url.searchParams.get('fields'), /cover_i/);
+  });
+
+  it('openLibraryCoverUrl só aceita id inteiro positivo e tamanho válido', () => {
+    assert.equal(openLibraryCoverUrl(710358, 'L'), 'https://covers.openlibrary.org/b/id/710358-L.jpg?default=false');
+    assert.equal(openLibraryCoverUrl('710358', 'x'), 'https://covers.openlibrary.org/b/id/710358-M.jpg?default=false');
+    for (const bad of [0, -1, 1.5, 'abc', '../../x', null, undefined, NaN]) {
+      assert.equal(openLibraryCoverUrl(bad), '', String(bad));
+    }
+  });
+
+  it('parseOpenLibraryResults ignora obras sem capa, repetidas e respostas inválidas', () => {
+    const json = {
+      docs: [
+        { title: 'Swamp Thing', author_name: ['Alan Moore', 'Len Wein'], cover_i: 710358, first_publish_year: 1987 },
+        { title: 'Sem capa' },
+        { title: 'Repetida', cover_i: 710358 },
+        { cover_i: 5, author_name: [] },
+        { title: 'Id ruim', cover_i: '../x' },
+      ],
+    };
+    assert.deepEqual(parseOpenLibraryResults(json), [
+      { coverId: 710358, title: 'Swamp Thing', author: 'Alan Moore', year: 1987 },
+      { coverId: 5, title: 'Sem título', author: '', year: null },
+    ]);
+    assert.deepEqual(parseOpenLibraryResults(null), []);
+    assert.deepEqual(parseOpenLibraryResults({ docs: 'x' }), []);
   });
 });

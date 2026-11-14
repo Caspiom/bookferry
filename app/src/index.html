@@ -499,6 +499,80 @@
       </div>
     </div>
 
+    <!-- MODAL DO LIVRO: nome, capa e "Continuar lendo" -->
+    <div
+      id="book-menu-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="book-menu-title"
+    >
+      <div class="modal-card book-menu-card">
+        <h2 id="book-menu-title">Editar livro</h2>
+        <p id="book-menu-original" class="muted-note"></p>
+
+        <label class="field-label" for="book-menu-name">Nome de exibição</label>
+        <div class="input-row">
+          <input
+            id="book-menu-name"
+            type="text"
+            class="text-input"
+            maxlength="200"
+            autocomplete="off"
+            placeholder="Nome do arquivo"
+          />
+          <button id="book-menu-name-save" type="button" class="btn btn-primary btn-sm">
+            Salvar
+          </button>
+        </div>
+
+        <div class="book-menu-cover-row">
+          <div id="book-menu-cover-preview" class="book-menu-cover-preview" aria-hidden="true"></div>
+          <div class="book-menu-cover-actions">
+            <button id="book-menu-pick-image" type="button" class="btn btn-secondary btn-sm">
+              Escolher imagem…
+            </button>
+            <button id="book-menu-web-search" type="button" class="btn btn-secondary btn-sm">
+              Buscar capa na internet
+            </button>
+            <button id="book-menu-reset-cover" type="button" class="btn btn-ghost btn-sm">
+              Restaurar capa original
+            </button>
+          </div>
+        </div>
+        <input
+          id="book-menu-file"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          class="hidden"
+        />
+
+        <div id="book-menu-web" class="book-menu-web hidden">
+          <div class="input-row">
+            <input
+              id="book-menu-web-query"
+              type="text"
+              class="text-input"
+              autocomplete="off"
+              aria-label="Texto da busca de capa"
+            />
+            <button id="book-menu-web-go" type="button" class="btn btn-primary btn-sm">
+              Buscar
+            </button>
+          </div>
+          <p id="book-menu-web-status" class="muted-note" role="status"></p>
+          <div id="book-menu-web-results" class="book-menu-web-results"></div>
+        </div>
+
+        <div class="modal-actions book-menu-footer">
+          <button id="book-menu-hide-continue" type="button" class="btn btn-secondary hidden">
+            Tirar do Continuar lendo
+          </button>
+          <button id="book-menu-close" type="button" class="btn btn-secondary">Fechar</button>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL DE PROGRESSO DE DOWNLOAD -->
     <div
       id="download-modal"

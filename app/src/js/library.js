@@ -2,7 +2,10 @@
 // download com progresso/cancelamento e fluxo de retomada (`decide_book_resume`).
 
 import { api } from './api.js';
+import { attachCover } from './covers.js';
+import { openBookMenu } from './book-menu.js';
 import {
+  bookDisplayTitle,
   buildFolderView,
   deriveCoverStyle,
   filterAndSortLibrary,
@@ -26,13 +29,14 @@ import {
  * @param {(book: object) => void} onRemoveDownload
  * @returns {HTMLElement}
  */
-function createBookCardElement(book, onOpenBook, onRemoveDownload) {
+function createBookCardElement(book, onOpenBook, onRemoveDownload, { inContinue = false } = {}) {
   const card = document.createElement('article');
   card.className = 'book-card';
   card.dataset.bookId = book.book_id;
   card.dataset.format = book.format;
 
-  const cover = deriveCoverStyle(book.book_id, book.title, book.format);
+  const name = bookDisplayTitle(book);
+  const cover = deriveCoverStyle(book.book_id, name, book.format);
   const pct = book.position ? Number(book.position.percent) || 0 : 0;
   const pctLabel = formatPercent(pct);
 
@@ -41,7 +45,7 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload) {
   openBtn.className = 'book-card-main';
   openBtn.setAttribute(
     'aria-label',
-    `Abrir ${book.title} (${cover.badge}, ${pctLabel} lido, ${
+    `Abrir ${name} (${cover.badge}, ${pctLabel} lido, ${
       book.downloaded ? 'baixado' : 'na nuvem'
     })`,
   );
@@ -71,6 +75,7 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload) {
   coverDiv.appendChild(formatBadge);
   coverDiv.appendChild(dlBadge);
   coverDiv.appendChild(initialSpan);
+  attachCover(coverDiv, book);
 
   // Corpo do card
   const bodyDiv = document.createElement('div');
@@ -78,8 +83,8 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload) {
 
   const titleH3 = document.createElement('h3');
   titleH3.className = 'book-title';
-  titleH3.title = book.title;
-  titleH3.textContent = book.title;
+  titleH3.title = book.display_title ? `${name} (arquivo: ${book.title})` : name;
+  titleH3.textContent = name;
 
   const metaDiv = document.createElement('div');
   metaDiv.className = 'book-meta';
@@ -106,12 +111,51 @@ function createBookCardElement(book, onOpenBook, onRemoveDownload) {
   openBtn.appendChild(bodyDiv);
   card.appendChild(openBtn);
 
+  // Ações rápidas sobre a capa: tirar do "Continuar lendo" (só nessa seção) e menu do livro.
+  const actions = document.createElement('div');
+  actions.className = 'book-card-actions';
+  if (inContinue) {
+    const hideBtn = document.createElement('button');
+    hideBtn.type = 'button';
+    hideBtn.className = 'book-card-action book-continue-hide-btn';
+    hideBtn.title = 'Tirar do Continuar lendo';
+    hideBtn.setAttribute('aria-label', `Tirar ${name} do Continuar lendo`);
+    hideBtn.textContent = '✕';
+    hideBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      try {
+        await api.setContinueHidden(book.book_id, true);
+        showToast('Tirado do Continuar lendo. Volta sozinho quando você ler de novo.');
+      } catch (err) {
+        showToast(`Não foi possível tirar do Continuar lendo: ${err}`);
+      }
+    });
+    actions.appendChild(hideBtn);
+  }
+  const menuBtn = document.createElement('button');
+  menuBtn.type = 'button';
+  menuBtn.className = 'book-card-action book-menu-btn';
+  menuBtn.title = 'Editar nome e capa';
+  menuBtn.setAttribute('aria-label', `Editar nome e capa de ${name}`);
+  menuBtn.textContent = '⋯';
+  menuBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    openBookMenu(book);
+  });
+  actions.appendChild(menuBtn);
+  card.appendChild(actions);
+  // Botão direito (desktop) e toque longo (celular) também abrem o menu.
+  card.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    openBookMenu(book);
+  });
+
   if (book.downloaded) {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'book-remove-dl-btn';
     removeBtn.title = 'Remover cópia baixada deste aparelho';
-    removeBtn.setAttribute('aria-label', `Remover download de ${book.title}`);
+    removeBtn.setAttribute('aria-label', `Remover download de ${name}`);
     removeBtn.textContent = 'Remover cópia local';
     removeBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -259,7 +303,9 @@ export function renderLibraryView(books, searchQuery, onOpenBook, onRemoveDownlo
     if ((searching || currentFolder === '') && continueReading.length > 0) {
       continueSection.classList.remove('hidden');
       for (const b of continueReading.slice(0, 4)) {
-        continueGrid.appendChild(createBookCardElement(b, onOpenBook, onRemoveDownload));
+        continueGrid.appendChild(
+          createBookCardElement(b, onOpenBook, onRemoveDownload, { inContinue: true }),
+        );
       }
     } else {
       continueSection.classList.add('hidden');
