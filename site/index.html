@@ -15,6 +15,20 @@
 <link rel="icon" href="img/favicon.ico" sizes="any" />
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
 <link rel="manifest" href="img/site.webmanifest" />
+<script>
+  /* Evita piscar o português antes de trocar para inglês (mesma regra do script principal). */
+  (function () {
+    var l = null;
+    try { l = new URLSearchParams(location.search).get('lang') || localStorage.getItem('bookferry-lang'); } catch (e) {}
+    if (!l) l = String((navigator.languages && navigator.languages[0]) || navigator.language || 'pt').toLowerCase().indexOf('pt') === 0 ? 'pt' : 'en';
+    if (l === 'en') {
+      var d = document.documentElement;
+      d.lang = 'en';
+      d.classList.add('lang-wait');
+      setTimeout(function () { d.classList.remove('lang-wait'); }, 1500);
+    }
+  })();
+</script>
 <style>
 /* Bookferry — landing.
  * Mesma linguagem do app ("papel e tinta"): faixa de Tinta no topo com a demonstração da
@@ -299,6 +313,37 @@ p { margin: 0; }
 }
 .nav-links a:hover { color: var(--on-tinta); background: rgba(244, 236, 221, 0.07); }
 .nav .btn { min-height: 40px; padding: 0 16px; font-size: 0.88rem; }
+.lang-wait body { opacity: 0; }
+
+/* Troca de idioma: dois botões, o ativo em papel */
+.lang {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--on-tinta-line);
+  border-radius: 999px;
+}
+.lang button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  color: var(--on-tinta-2);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.lang button:hover:not([aria-pressed='true']) { color: var(--on-tinta); }
+.lang button[aria-pressed='true'] { background: var(--on-tinta); color: var(--tinta); }
+.lang button:focus-visible { outline: 2px solid var(--brasa-fill); outline-offset: 2px; }
+.nav .lang + .btn { margin-left: -12px; }
+
 .btn-paper { background: var(--on-tinta); color: var(--tinta); }
 .btn-paper:hover { background: #fffaf1; }
 .btn-line { color: var(--on-tinta); border-color: var(--on-tinta-line); }
@@ -790,7 +835,8 @@ section.block { padding-block: clamp(72px, 9vw, 128px); }
   font-size: clamp(0.72rem, 0.55rem + 0.5vw, 0.92rem);
   line-height: 1.18;
   letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .c-initial {
@@ -979,13 +1025,17 @@ footer.foot {
 }
 @media (max-width: 820px) {
   .nav-links { display: none; }
-  .nav .btn { margin-left: auto; }
+  .nav-inner { gap: 10px; }
+  .lang { margin-left: auto; }
+  .nav .lang + .btn { margin-left: 0; }
   .platform { grid-template-columns: minmax(0, 1fr) auto; }
   .platform p { grid-column: 1 / -1; grid-row: 2; }
   .closing-inner { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
   /* PC na largura toda, celular sobreposto no canto, sem cobrir o texto do PC */
+  .btn-code span { display: none; }
+  .nav .btn-code { width: 40px; padding: 0; justify-content: center; }
   .devices { display: block; position: relative; padding-bottom: 40px; }
   .laptop { padding: 7px; border-radius: 11px; }
   .laptop .page { padding: 16px 146px 12px 16px; min-height: 236px; }
@@ -1070,18 +1120,22 @@ footer.foot {
 <div class="band">
   <header class="nav" id="nav">
     <div class="wrap nav-inner">
-      <a class="brand" href="#topo" aria-label="Bookferry, início">
+      <a class="brand" href="#topo" aria-label="Bookferry, início" data-i18n-aria="nav.home">
         <svg aria-hidden="true"><use href="#mark" /></svg>
         <span>Bookferry</span>
       </a>
       <ul class="nav-links">
-        <li><a href="#como-funciona">Como funciona</a></li>
-        <li><a href="#leitura">Leitura</a></li>
-        <li><a href="#privacidade">Privacidade</a></li>
-        <li><a href="#plataformas">Plataformas</a></li>
+        <li><a href="#como-funciona" data-i18n="nav.how">Como funciona</a></li>
+        <li><a href="#leitura" data-i18n="nav.reading">Leitura</a></li>
+        <li><a href="#privacidade" data-i18n="nav.privacy">Privacidade</a></li>
+        <li><a href="#plataformas" data-i18n="nav.platforms">Plataformas</a></li>
       </ul>
-      <a class="btn btn-line" href="https://github.com/Caspiom/bookferry">
-        <svg aria-hidden="true"><use href="#i-code" /></svg>Código
+      <div class="lang" role="group" aria-label="Idioma" data-i18n-aria="nav.lang">
+        <button type="button" data-set-lang="pt" aria-pressed="true" lang="pt-BR" title="Português">PT</button>
+        <button type="button" data-set-lang="en" aria-pressed="false" lang="en" title="English">EN</button>
+      </div>
+      <a class="btn btn-line btn-code" href="https://github.com/Caspiom/bookferry" aria-label="Código no GitHub" data-i18n-aria="nav.codeAria">
+        <svg aria-hidden="true"><use href="#i-code" /></svg><span data-i18n="nav.code">Código</span>
       </a>
     </div>
   </header>
@@ -1091,69 +1145,69 @@ footer.foot {
       <div class="wrap">
         <div class="hero-grid">
           <div>
-            <span class="eyebrow">Leitor de livros e quadrinhos · PC e Android</span>
-            <h1>Feche o livro no computador. Abra no celular <em>na mesma página.</em></h1>
+            <span class="eyebrow" data-i18n="hero.eyebrow">Leitor de livros e quadrinhos · PC e Android</span>
+            <h1 data-i18n="hero.title">Feche o livro no computador. Abra no celular <em>na mesma página.</em></h1>
           </div>
           <div class="hero-side">
-            <p>O Bookferry guarda a biblioteca no <strong>seu</strong> PC e leva o ponto onde você parou até o celular pela rede de casa. Sem conta, sem assinatura, sem nuvem de terceiros.</p>
+            <p data-i18n="hero.lead">O Bookferry guarda a biblioteca no <strong>seu</strong> PC e leva o ponto onde você parou até o celular pela rede de casa. Sem conta, sem assinatura, sem nuvem de terceiros.</p>
             <div class="hero-ctas">
-              <a class="btn btn-paper" href="#como-funciona">Como funciona
+              <a class="btn btn-paper" href="#como-funciona"><span data-i18n="nav.how">Como funciona</span>
                 <svg aria-hidden="true"><use href="#i-arrow" /></svg>
               </a>
-              <a class="btn btn-line" href="#plataformas">Linux e Android</a>
+              <a class="btn btn-line" href="#plataformas" data-i18n="hero.cta2">Linux e Android</a>
             </div>
           </div>
         </div>
 
         <!-- Demonstração: vire a página em um aparelho e a balsa leva a posição ao outro -->
-        <div class="stage" id="stage" aria-label="Demonstração da sincronização entre PC e celular">
+        <div class="stage" id="stage" aria-label="Demonstração da sincronização entre PC e celular" data-i18n-aria="demo.aria">
           <div class="devices">
             <div class="laptop" id="dev-pc">
-              <span class="device-label"><svg class="icon" aria-hidden="true"><use href="#i-monitor" /></svg>seu PC</span>
+              <span class="device-label"><svg class="icon" aria-hidden="true"><use href="#i-monitor" /></svg><span data-i18n="demo.labelPc">seu PC</span></span>
               <div class="screen">
                 <div class="app-bar">
                   <span class="back"><svg class="icon" style="width:16px;height:16px" aria-hidden="true"><use href="#i-left" /></svg></span>
-                  <span class="title">Dom Casmurro<small>Machado de Assis · EPUB</small></span>
+                  <span class="title"><span data-book-title>Dom Casmurro</span><small data-book-byline>Machado de Assis · EPUB</small></span>
                   <span class="pill" data-pill><i></i><span data-pill-text>Conectado</span></span>
                 </div>
                 <div class="page">
-                  <div class="running-head"><span>Dom Casmurro</span><span data-chapter-short>Capítulo I</span></div>
+                  <div class="running-head"><span data-book-title>Dom Casmurro</span><span data-chapter-short>Capítulo I</span></div>
                   <h3 class="chapter" data-chapter>I · Do título</h3>
                   <p class="prose" data-prose></p>
                   <div class="zones">
-                    <button class="z-prev" type="button" data-turn="-1" aria-label="Página anterior no PC"></button>
+                    <button class="z-prev" type="button" data-turn="-1" aria-label="Página anterior no PC" data-i18n-aria="demo.prevPc"></button>
                     <button class="z-mid" type="button" tabindex="-1" aria-hidden="true"></button>
-                    <button class="z-next" type="button" data-turn="1" aria-label="Próxima página no PC"></button>
+                    <button class="z-next" type="button" data-turn="1" aria-label="Próxima página no PC" data-i18n-aria="demo.nextPc"></button>
                   </div>
                 </div>
                 <div class="reader-foot">
                   <span data-page>pág. 9 de 256</span>
                   <div class="track"><span data-track></span></div>
                   <span class="turn-btns">
-                    <button type="button" data-turn="-1" aria-label="Página anterior no PC"><svg class="icon" aria-hidden="true"><use href="#i-left" /></svg></button>
-                    <button type="button" data-turn="1" aria-label="Próxima página no PC"><svg class="icon" aria-hidden="true"><use href="#i-right" /></svg></button>
+                    <button type="button" data-turn="-1" aria-label="Página anterior no PC" data-i18n-aria="demo.prevPc"><svg class="icon" aria-hidden="true"><use href="#i-left" /></svg></button>
+                    <button type="button" data-turn="1" aria-label="Próxima página no PC" data-i18n-aria="demo.nextPc"><svg class="icon" aria-hidden="true"><use href="#i-right" /></svg></button>
                   </span>
                 </div>
               </div>
             </div>
 
             <div class="phone" id="dev-phone">
-              <span class="device-label"><svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>celular</span>
+              <span class="device-label"><svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg><span data-i18n="demo.labelPhone">celular</span></span>
               <div class="screen">
                 <div class="status-row"><span data-clock>21:40</span><span class="cam"></span><span>Wi‑Fi</span></div>
                 <div class="app-bar">
                   <svg class="mark" aria-hidden="true" style="--mk-page: var(--logo-page); --mk-page-2: var(--logo-page-2)"><use href="#mark" /></svg>
-                  <span class="title">Dom Casmurro</span>
+                  <span class="title" data-book-title>Dom Casmurro</span>
                   <span class="pill" data-pill><i></i><span data-pill-text>Conectado</span></span>
                 </div>
                 <div class="page">
-                  <div class="running-head"><span>Dom Casmurro</span></div>
+                  <div class="running-head"><span data-book-title>Dom Casmurro</span></div>
                   <h3 class="chapter" data-chapter>I · Do título</h3>
                   <p class="prose" data-prose></p>
                   <div class="zones">
-                    <button class="z-prev" type="button" data-turn="-1" aria-label="Página anterior no celular"></button>
-                    <button class="z-mid" type="button" data-immersive aria-label="Mostrar ou esconder os controles do celular"></button>
-                    <button class="z-next" type="button" data-turn="1" aria-label="Próxima página no celular"></button>
+                    <button class="z-prev" type="button" data-turn="-1" aria-label="Página anterior no celular" data-i18n-aria="demo.prevPhone"></button>
+                    <button class="z-mid" type="button" data-immersive aria-label="Mostrar ou esconder os controles do celular" data-i18n-aria="demo.immersive"></button>
+                    <button class="z-next" type="button" data-turn="1" aria-label="Próxima página no celular" data-i18n-aria="demo.nextPhone"></button>
                   </div>
                 </div>
                 <div class="reader-foot">
@@ -1171,7 +1225,7 @@ footer.foot {
           </div>
 
           <div class="stage-caption">
-            <span class="hint"><b>Experimente:</b> toque na borda direita de uma das telas para virar a página.</span>
+            <span class="hint" data-i18n="demo.hint"><b>Experimente:</b> toque na borda direita de uma das telas para virar a página.</span>
             <span class="log" id="log" aria-live="polite">pág. 9 · epubcfi(/6/4!/4/2/1:0) · os dois aparelhos em dia</span>
           </div>
         </div>
@@ -1188,60 +1242,60 @@ footer.foot {
 <section class="block" id="como-funciona">
   <div class="wrap">
     <div class="block-head">
-      <span class="eyebrow">Como funciona</span>
-      <h2 class="h2">Seu PC é o servidor. O celular é o leitor de bolso.</h2>
-      <p class="lead">Não existe um servidor nosso no meio. O app do computador já traz o servidor embutido e o celular conversa direto com ele.</p>
+      <span class="eyebrow" data-i18n="nav.how">Como funciona</span>
+      <h2 class="h2" data-i18n="how.title">Seu PC é o servidor. O celular é o leitor de bolso.</h2>
+      <p class="lead" data-i18n="how.lead">Não existe um servidor nosso no meio. O app do computador já traz o servidor embutido e o celular conversa direto com ele.</p>
     </div>
 
     <ol class="steps">
       <li class="step">
         <div class="step-fig" aria-hidden="true">
           <div class="tree">
-            <div class="root"><svg class="icon"><use href="#i-folder" /></svg>~/Livros</div>
-            <div class="d1"><svg class="icon"><use href="#i-folder" /></svg>Machado de Assis</div>
-            <div class="d2"><svg class="icon"><use href="#i-file" /></svg>Dom Casmurro<span class="fmt">EPUB</span></div>
-            <div class="d2"><svg class="icon"><use href="#i-file" /></svg>Brás Cubas<span class="fmt">EPUB</span></div>
-            <div class="d1"><svg class="icon"><use href="#i-folder" /></svg>Quadrinhos</div>
+            <div class="root"><svg class="icon"><use href="#i-folder" /></svg><span data-i18n="tree.root">~/Livros</span></div>
+            <div class="d1"><svg class="icon"><use href="#i-folder" /></svg><span data-i18n="tree.author">Machado de Assis</span></div>
+            <div class="d2"><svg class="icon"><use href="#i-file" /></svg><span data-i18n="tree.b1">Dom Casmurro</span><span class="fmt">EPUB</span></div>
+            <div class="d2"><svg class="icon"><use href="#i-file" /></svg><span data-i18n="tree.b2">Brás Cubas</span><span class="fmt">EPUB</span></div>
+            <div class="d1"><svg class="icon"><use href="#i-folder" /></svg><span data-i18n="tree.comics">Quadrinhos</span></div>
             <div class="d2"><svg class="icon"><use href="#i-file" /></svg>Little Nemo, vol. 1<span class="fmt">CBZ</span></div>
           </div>
         </div>
-        <h3>Escolha a pasta dos livros</h3>
-        <p>No computador, aponte a pasta onde ficam seus EPUB, PDF e CBZ. O Bookferry liga o servidor local e monta a biblioteca respeitando as subpastas.</p>
+        <h3 data-i18n="how.s1t">Escolha a pasta dos livros</h3>
+        <p data-i18n="how.s1d">No computador, aponte a pasta onde ficam seus EPUB, PDF e CBZ. O Bookferry liga o servidor local e monta a biblioteca respeitando as subpastas.</p>
       </li>
       <li class="step">
         <div class="step-fig" aria-hidden="true">
           <div class="qr-wrap">
             <div class="qr" id="qr"></div>
             <div class="qr-meta">
-              <span>expira em</span>
+              <span data-i18n="how.expires">expira em</span>
               <b id="qr-timer">4:52</b>
-              <span class="tag"><svg class="icon"><use href="#i-shield" /></svg>certificado fixado</span>
+              <span class="tag"><svg class="icon"><use href="#i-shield" /></svg><span data-i18n="how.pinned">certificado fixado</span></span>
             </div>
           </div>
         </div>
-        <h3>Pareie com um QR code</h3>
-        <p>No celular, leia o QR que aparece nos Ajustes do PC. Não há conta nem senha: o celular guarda o certificado do seu computador e só conversa com ele.</p>
+        <h3 data-i18n="how.s2t">Pareie com um QR code</h3>
+        <p data-i18n="how.s2d">No celular, leia o QR que aparece nos Ajustes do PC. Não há conta nem senha: o celular guarda o certificado do seu computador e só conversa com ele.</p>
       </li>
       <li class="step">
         <div class="step-fig" aria-hidden="true">
           <div class="handoff">
             <div class="handoff-row">
               <svg class="icon"><use href="#i-monitor" /></svg>
-              <span>Fechou no PC</span>
-              <b>pág. 50</b>
+              <span data-i18n="how.closedPc">Fechou no PC</span>
+              <b data-i18n="how.p50">pág. 50</b>
             </div>
             <div class="handoff-arrow">
               <svg viewBox="0 0 60 14"><path d="M2 7 q7 -7 14 0 t14 0 t14 0 t14 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" /></svg>
             </div>
             <div class="handoff-row">
               <svg class="icon"><use href="#i-phone" /></svg>
-              <span>Abriu no celular</span>
-              <b>pág. 50</b>
+              <span data-i18n="how.openedPhone">Abriu no celular</span>
+              <b data-i18n="how.p50">pág. 50</b>
             </div>
           </div>
         </div>
-        <h3>Leia onde estiver</h3>
-        <p>Baixe o livro para o celular quando quiser. Cada página virada vai para o outro aparelho, e quem abrir o livro depois retoma dali.</p>
+        <h3 data-i18n="how.s3t">Leia onde estiver</h3>
+        <p data-i18n="how.s3d">Baixe o livro para o celular quando quiser. Cada página virada vai para o outro aparelho, e quem abrir o livro depois retoma dali.</p>
       </li>
     </ol>
   </div>
@@ -1252,82 +1306,82 @@ footer.foot {
   <div class="wrap reading">
     <div>
       <div class="block-head" style="margin-bottom: 0">
-        <span class="eyebrow">Leitura</span>
-        <h2 class="h2">Um leitor de verdade, para livro e para quadrinho.</h2>
-        <p class="lead">EPUB com texto que se ajusta à tela, PDF página a página e quadrinhos com página dupla e leitura da direita para a esquerda, para mangá.</p>
+        <span class="eyebrow" data-i18n="nav.reading">Leitura</span>
+        <h2 class="h2" data-i18n="read.title">Um leitor de verdade, para livro e para quadrinho.</h2>
+        <p class="lead" data-i18n="read.lead">EPUB com texto que se ajusta à tela, PDF página a página e quadrinhos com página dupla e leitura da direita para a esquerda, para mangá.</p>
       </div>
-      <div class="formats" aria-label="Formatos">
+      <div class="formats" aria-label="Formatos" data-i18n-aria="read.formats">
         <span class="fmt-chip">EPUB</span>
         <span class="fmt-chip">PDF</span>
         <span class="fmt-chip">CBZ</span>
         <span class="fmt-chip soon">CBR</span>
         <span class="fmt-chip soon">MOBI</span>
         <span class="fmt-chip soon">FB2</span>
-        <span class="note">os contornados vêm a seguir</span>
+        <span class="note" data-i18n="read.soon">os contornados vêm a seguir</span>
       </div>
       <dl class="features">
-        <div><dt>Painel Aa por livro</dt><dd>Fonte, tamanho, margens e tema ficam salvos em cada livro, com predefinições para trocar rápido.</dd></div>
-        <div><dt>Claro, escuro e sépia</dt><dd>Temas pensados para ler à noite sem acender a sala inteira.</dd></div>
-        <div><dt>Toque em três faixas</dt><dd>30% da tela volta, 40% mostra os controles, 30% avança. No Android, as teclas de volume também viram a página.</dd></div>
-        <div><dt>Modo imersivo</dt><dd>Tela cheia sem barras, e atalhos de teclado no computador.</dd></div>
-        <div><dt>Capas que faltam</dt><dd>Busca a capa na Open Library pelo nome do livro, ou usa a imagem que você escolher.</dd></div>
-        <div><dt>Posição exata</dt><dd>Em EPUB a posição é um <code>epubcfi</code>, não uma porcentagem. Em PDF e CBZ, o número da página.</dd></div>
+        <div><dt data-i18n="read.f1t">Painel Aa por livro</dt><dd data-i18n="read.f1d">Fonte, tamanho, margens e tema ficam salvos em cada livro, com predefinições para trocar rápido.</dd></div>
+        <div><dt data-i18n="read.f2t">Claro, escuro e sépia</dt><dd data-i18n="read.f2d">Temas pensados para ler à noite sem acender a sala inteira.</dd></div>
+        <div><dt data-i18n="read.f3t">Toque em três faixas</dt><dd data-i18n="read.f3d">30% da tela volta, 40% mostra os controles, 30% avança. No Android, as teclas de volume também viram a página.</dd></div>
+        <div><dt data-i18n="read.f4t">Modo imersivo</dt><dd data-i18n="read.f4d">Tela cheia sem barras, e atalhos de teclado no computador.</dd></div>
+        <div><dt data-i18n="read.f5t">Capas que faltam</dt><dd data-i18n="read.f5d">Busca a capa na Open Library pelo nome do livro, ou usa a imagem que você escolher.</dd></div>
+        <div><dt data-i18n="read.f6t">Posição exata</dt><dd data-i18n="read.f6d">Em EPUB a posição é um <code>epubcfi</code>, não uma porcentagem. Em PDF e CBZ, o número da página.</dd></div>
       </dl>
     </div>
 
-    <div class="shelf" aria-label="Exemplo da biblioteca">
-      <div class="shelf-head"><h3>Continuar lendo</h3><span>exemplo</span></div>
+    <div class="shelf" aria-label="Exemplo da biblioteca" data-i18n-aria="shelf.aria">
+      <div class="shelf-head"><h3 data-i18n="shelf.continue">Continuar lendo</h3><span data-i18n="shelf.example">exemplo</span></div>
       <div class="continue">
         <div class="cover" style="--g: linear-gradient(160deg, hsl(208, 30%, 38%), hsl(222, 36%, 24%))">
-          <div class="c-art"><span class="c-rule"></span><span class="c-title">Dom Casmurro</span></div>
+          <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.c0">Dom Casmurro</span></div>
         </div>
         <div class="continue-body">
-          <h4>Dom Casmurro</h4>
-          <div class="meta"><span>Machado de Assis</span><span>·</span><b>38%</b><span>· no celular há 12 min</span></div>
+          <h4 data-i18n="shelf.c0">Dom Casmurro</h4>
+          <div class="meta"><span data-i18n="shelf.c0author">Machado de Assis</span><span>·</span><b>38%</b><span data-i18n="shelf.c0when">· no celular há 12 min</span></div>
           <div class="track"><span style="width: 38%"></span></div>
-          <span class="cta">Continuar <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg></span>
+          <span class="cta"><span data-i18n="shelf.cta">Continuar</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg></span>
         </div>
       </div>
 
-      <div class="shelf-head"><h3>Biblioteca</h3><span>4 de 212 livros</span></div>
+      <div class="shelf-head"><h3 data-i18n="shelf.library">Biblioteca</h3><span data-i18n="shelf.count">4 de 212 livros</span></div>
       <div class="covers">
         <div class="book">
           <div class="cover" style="--g: linear-gradient(160deg, hsl(22, 34%, 40%), hsl(8, 38%, 24%))">
-            <div class="c-art"><span class="c-rule"></span><span class="c-title">Memórias Póstumas de Brás Cubas</span></div>
-            <span class="c-initial" aria-hidden="true">M</span>
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.b1">Memórias Póstumas de Brás Cubas</span></div>
+            <span class="c-initial" aria-hidden="true" data-i18n="shelf.b1i">M</span>
             <span class="c-badge">EPUB</span>
           </div>
-          <div class="book-title">Memórias Póstumas de Brás Cubas</div>
-          <div class="book-meta"><span class="pct new">Novo</span></div>
+          <div class="book-title" data-i18n="shelf.b1">Memórias Póstumas de Brás Cubas</div>
+          <div class="book-meta"><span class="pct new" data-i18n="shelf.new">Novo</span></div>
         </div>
         <div class="book">
           <div class="cover" style="--g: linear-gradient(160deg, hsl(176, 30%, 34%), hsl(196, 36%, 20%))">
-            <div class="c-art"><span class="c-rule"></span><span class="c-title">Little Nemo in Slumberland</span></div>
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" lang="en">Little Nemo in Slumberland</span></div>
             <span class="c-initial" aria-hidden="true">L</span>
             <span class="c-badge">CBZ</span>
             <span class="c-progress"><span style="width: 72%"></span></span>
           </div>
           <div class="book-title">Little Nemo in Slumberland</div>
-          <div class="book-meta"><span class="pct">72%</span><span>· Quadrinhos</span></div>
+          <div class="book-meta"><span class="pct">72%</span><span data-i18n="shelf.comics">· Quadrinhos</span></div>
         </div>
         <div class="book">
           <div class="cover" style="--g: linear-gradient(160deg, hsl(40, 28%, 40%), hsl(28, 34%, 24%))">
-            <div class="c-art"><span class="c-rule"></span><span class="c-title">O Cortiço</span></div>
-            <span class="c-initial" aria-hidden="true">O</span>
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.b3">O Cortiço</span></div>
+            <span class="c-initial" aria-hidden="true" data-i18n="shelf.b3i">O</span>
             <span class="c-badge">PDF</span>
             <span class="c-progress"><span style="width: 100%"></span></span>
           </div>
-          <div class="book-title">O Cortiço</div>
-          <div class="book-meta"><span class="pct done">Lido</span></div>
+          <div class="book-title" data-i18n="shelf.b3">O Cortiço</div>
+          <div class="book-meta"><span class="pct done" data-i18n="shelf.done">Lido</span></div>
         </div>
         <div class="book">
           <div class="cover" style="--g: linear-gradient(160deg, hsl(262, 18%, 38%), hsl(238, 26%, 22%))">
-            <div class="c-art"><span class="c-rule"></span><span class="c-title">Os Lusíadas</span></div>
-            <span class="c-initial" aria-hidden="true">O</span>
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.b4">Os Lusíadas</span></div>
+            <span class="c-initial" aria-hidden="true" data-i18n="shelf.b4i">O</span>
             <span class="c-badge">PDF</span>
             <span class="c-progress"><span style="width: 12%"></span></span>
           </div>
-          <div class="book-title">Os Lusíadas</div>
+          <div class="book-title" data-i18n="shelf.b4">Os Lusíadas</div>
           <div class="book-meta"><span class="pct">12%</span></div>
         </div>
       </div>
@@ -1339,55 +1393,55 @@ footer.foot {
 <section class="block" id="privacidade" style="padding-top: 0">
   <div class="wrap">
     <div class="block-head">
-      <span class="eyebrow">Privacidade e sincronização</span>
-      <h2 class="h2">Seus livros não saem de casa.</h2>
-      <p class="lead">A biblioteca e o banco de dados ficam no seu computador. O celular acha o PC na rede Wi‑Fi e fala com ele por uma conexão cifrada. Ninguém além de você sabe o que você está lendo.</p>
+      <span class="eyebrow" data-i18n="priv.eyebrow">Privacidade e sincronização</span>
+      <h2 class="h2" data-i18n="priv.title">Seus livros não saem de casa.</h2>
+      <p class="lead" data-i18n="priv.lead">A biblioteca e o banco de dados ficam no seu computador. O celular acha o PC na rede Wi‑Fi e fala com ele por uma conexão cifrada. Ninguém além de você sabe o que você está lendo.</p>
     </div>
 
     <div class="privacy-grid">
       <div>
-        <div class="topo" role="img" aria-label="O celular se conecta ao PC pela rede Wi-Fi de casa, com conexão cifrada. Um relay opcional para fora de casa está nos próximos passos.">
+        <div class="topo" role="img" aria-label="O celular se conecta ao PC pela rede Wi-Fi de casa, com conexão cifrada. Um relay opcional para fora de casa está nos próximos passos." data-i18n-aria="priv.topoAria">
           <div class="node">
             <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
-            <b>Celular</b>
-            <small>livros baixados<br />fila de mudanças</small>
+            <b data-i18n="priv.phone">Celular</b>
+            <small data-i18n="priv.phoneNote">livros baixados<br />fila de mudanças</small>
           </div>
-          <div class="link"><span>Wi‑Fi de casa<br />TLS · mDNS</span></div>
+          <div class="link"><span data-i18n="priv.link">Wi‑Fi de casa<br />TLS · mDNS</span></div>
           <div class="node">
             <svg class="icon" aria-hidden="true"><use href="#i-monitor" /></svg>
-            <b>Seu PC</b>
-            <small>biblioteca<br />servidor + SQLite</small>
+            <b data-i18n="priv.pc">Seu PC</b>
+            <small data-i18n="priv.pcNote">biblioteca<br />servidor + SQLite</small>
           </div>
           <div class="relay">
             <svg class="icon" aria-hidden="true"><use href="#i-cloud" /></svg>
-            <span><b>Fora de casa:</b> um relay opcional que só repassa bytes cifrados de ponta a ponta. Não guarda nem lê nada.</span>
-            <span class="soon">a seguir</span>
+            <span data-i18n="priv.relay"><b>Fora de casa:</b> um relay opcional que só repassa bytes cifrados de ponta a ponta. Não guarda nem lê nada.</span>
+            <span class="soon" data-i18n="priv.soon">a seguir</span>
           </div>
         </div>
 
         <div class="limit">
           <svg class="icon" aria-hidden="true"><use href="#i-power" /></svg>
-          <p><b>O preço de não depender de nuvem:</b> com o PC desligado, o celular não sincroniza nem baixa livros novos. Os livros que já estão nele continuam abrindo normalmente.</p>
+          <p data-i18n="priv.limit"><b>O preço de não depender de nuvem:</b> com o PC desligado, o celular não sincroniza nem baixa livros novos. Os livros que já estão nele continuam abrindo normalmente.</p>
         </div>
       </div>
 
       <ul class="facts">
         <li>
-          <h3>Leu sem internet? Tudo bem.</h3>
-          <p>No ônibus ou no avião, cada página virada fica numa fila no celular. Quando o PC aparecer na rede, a fila vai para ele sozinha.</p>
+          <h3 data-i18n="priv.f1t">Leu sem internet? Tudo bem.</h3>
+          <p data-i18n="priv.f1d">No ônibus ou no avião, cada página virada fica numa fila no celular. Quando o PC aparecer na rede, a fila vai para ele sozinha.</p>
         </li>
         <li>
-          <h3>Quando os dois aparelhos leram</h3>
-          <p>Se o outro aparelho tem uma posição mais recente, mas atrás da sua, o Bookferry pergunta antes de te levar para trás.</p>
-          <div class="resume" aria-label="Exemplo da pergunta de retomada">
-            <h4>Continuar de onde parou?</h4>
-            <p>No PC você parou na pág. 42, há 5 min. Neste celular você está na pág. 50.</p>
-            <div class="acts"><span class="sec">Ficar aqui</span><span class="pri">Continuar lá</span></div>
+          <h3 data-i18n="priv.f2t">Quando os dois aparelhos leram</h3>
+          <p data-i18n="priv.f2d">Se o outro aparelho tem uma posição mais recente, mas atrás da sua, o Bookferry pergunta antes de te levar para trás.</p>
+          <div class="resume" aria-label="Exemplo da pergunta de retomada" data-i18n-aria="priv.resumeAria">
+            <h4 data-i18n="priv.resumeT">Continuar de onde parou?</h4>
+            <p data-i18n="priv.resumeD">No PC você parou na pág. 42, há 5 min. Neste celular você está na pág. 50.</p>
+            <div class="acts"><span class="sec" data-i18n="priv.stay">Ficar aqui</span><span class="pri" data-i18n="priv.go">Continuar lá</span></div>
           </div>
         </li>
         <li>
-          <h3>Sem conta para criar</h3>
-          <p>O pareamento é o QR code e mais nada. Para tirar um aparelho, revogue nos Ajustes do PC.</p>
+          <h3 data-i18n="priv.f3t">Sem conta para criar</h3>
+          <p data-i18n="priv.f3d">O pareamento é o QR code e mais nada. Para tirar um aparelho, revogue nos Ajustes do PC.</p>
         </li>
       </ul>
     </div>
@@ -1398,41 +1452,41 @@ footer.foot {
 <section class="block" id="plataformas" style="padding-top: 0">
   <div class="wrap">
     <div class="block-head">
-      <span class="eyebrow">Plataformas</span>
-      <h2 class="h2">Onde roda hoje, e o que vem depois.</h2>
-      <p class="lead">O Bookferry está na primeira versão. Esta é a lista sem enfeite.</p>
+      <span class="eyebrow" data-i18n="nav.platforms">Plataformas</span>
+      <h2 class="h2" data-i18n="plat.title">Onde roda hoje, e o que vem depois.</h2>
+      <p class="lead" data-i18n="plat.lead">O Bookferry está na primeira versão. Esta é a lista sem enfeite.</p>
     </div>
 
     <div class="platforms">
       <div class="platform">
         <h3>Linux</h3>
-        <p>App de desktop com servidor embutido. Inclui módulo para <code>NixOS</code>.</p>
-        <span class="status ok"><i></i>Versão inicial</span>
+        <p data-i18n="plat.linux">App de desktop com servidor embutido. Inclui módulo para <code>NixOS</code>.</p>
+        <span class="status ok"><i></i><span data-i18n="st.early">Versão inicial</span></span>
       </div>
       <div class="platform">
         <h3>Android</h3>
-        <p>Leitor e cliente de sincronização, com download dos livros sob demanda.</p>
-        <span class="status ok"><i></i>Versão inicial</span>
+        <p data-i18n="plat.android">Leitor e cliente de sincronização, com download dos livros sob demanda.</p>
+        <span class="status ok"><i></i><span data-i18n="st.early">Versão inicial</span></span>
       </div>
       <div class="platform">
-        <h3>Leitura fora de casa</h3>
-        <p>Relay sem estado, cifrado de ponta a ponta, para sincronizar longe da rede de casa.</p>
-        <span class="status next"><i></i>A seguir</span>
+        <h3 data-i18n="plat.relayT">Leitura fora de casa</h3>
+        <p data-i18n="plat.relayD">Relay sem estado, cifrado de ponta a ponta, para sincronizar longe da rede de casa.</p>
+        <span class="status next"><i></i><span data-i18n="st.next">A seguir</span></span>
       </div>
       <div class="platform">
-        <h3>Mais formatos</h3>
-        <p><code>CBR</code>, <code>CB7</code>, <code>MOBI</code>, <code>AZW3</code> e <code>FB2</code>, séries de quadrinhos e lista “Ler a seguir” sincronizada.</p>
-        <span class="status next"><i></i>A seguir</span>
+        <h3 data-i18n="plat.fmtT">Mais formatos</h3>
+        <p data-i18n="plat.fmtD"><code>CBR</code>, <code>CB7</code>, <code>MOBI</code>, <code>AZW3</code> e <code>FB2</code>, séries de quadrinhos e lista “Ler a seguir” sincronizada.</p>
+        <span class="status next"><i></i><span data-i18n="st.next">A seguir</span></span>
       </div>
       <div class="platform">
-        <h3>Windows e macOS</h3>
-        <p>O app é feito em Tauri e Rust, então o caminho existe. Ainda não foi testado.</p>
-        <span class="status later"><i></i>Planejado</span>
+        <h3 data-i18n="plat.winT">Windows e macOS</h3>
+        <p data-i18n="plat.winD">O app é feito em Tauri e Rust, então o caminho existe. Ainda não foi testado.</p>
+        <span class="status later"><i></i><span data-i18n="st.planned">Planejado</span></span>
       </div>
       <div class="platform">
-        <h3>Destaques, notas e leitura em voz alta</h3>
-        <p>Só depois que a sincronização estiver sólida.</p>
-        <span class="status later"><i></i>Depois</span>
+        <h3 data-i18n="plat.notesT">Destaques, notas e leitura em voz alta</h3>
+        <p data-i18n="plat.notesD">Só depois que a sincronização estiver sólida.</p>
+        <span class="status later"><i></i><span data-i18n="st.later">Depois</span></span>
       </div>
     </div>
   </div>
@@ -1444,18 +1498,18 @@ footer.foot {
     <div class="wrap closing-inner">
       <svg class="mark-lg" viewBox="170 190 684 690" aria-hidden="true"><use href="#mark" /></svg>
       <div>
-        <h2>A página vai com você.</h2>
-        <p>Acompanhe o desenvolvimento, leia o código e teste a versão inicial no Linux e no Android.</p>
+        <h2 data-i18n="end.title">A página vai com você.</h2>
+        <p data-i18n="end.lead">Acompanhe o desenvolvimento, leia o código e teste a versão inicial no Linux e no Android.</p>
       </div>
       <a class="btn btn-paper" href="https://github.com/Caspiom/bookferry">
-        <svg aria-hidden="true"><use href="#i-code" /></svg>Ver no GitHub
+        <svg aria-hidden="true"><use href="#i-code" /></svg><span data-i18n="end.cta">Ver no GitHub</span>
       </a>
     </div>
   </section>
   <footer class="foot">
     <div class="wrap foot-inner">
       <span>© 2026 Bookferry</span>
-      <span>Textos de exemplo: <i>Dom Casmurro</i>, Machado de Assis (1899), domínio público. Tipografia: Literata, <a href="fonts/OFL.txt">SIL OFL 1.1</a>.</span>
+      <span data-i18n="end.credits">Textos de exemplo: <i>Dom Casmurro</i>, Machado de Assis (1899), domínio público. Tipografia: Literata, <a href="fonts/OFL.txt">SIL OFL 1.1</a>.</span>
     </div>
   </footer>
 </div>
@@ -1464,19 +1518,233 @@ footer.foot {
 (() => {
   'use strict';
 
-  /* ---------------------------------------------------- Demonstração */
-  const TOTAL = 256;
-  const FIRST = 9;
-  const PAGES = [
-    { ch: 'I · Do título', short: 'Capítulo I', text: 'Uma noite destas, vindo da cidade para o Engenho Novo, encontrei no trem da Central um rapaz aqui do bairro, que eu conheço de vista e de chapéu. Cumprimentou-me, sentou-se ao pé de mim, falou da lua e dos ministros, e acabou recitando-me versos.' },
-    { ch: 'I · Do título', short: 'Capítulo I', text: 'A viagem era curta, e os versos pode ser que não fossem inteiramente maus. Sucedeu, porém, que, como eu estava cansado, fechei os olhos três ou quatro vezes; tanto bastou para que ele interrompesse a leitura e metesse os versos no bolso.' },
-    { ch: 'I · Do título', short: 'Capítulo I', text: '— Continue, disse eu acordando. — Já acabei, murmurou ele. — São muito bonitos. Vi-lhe fazer um gesto para tirá-los outra vez do bolso, mas não passou do gesto; estava amuado.' },
-    { ch: 'I · Do título', short: 'Capítulo I', text: 'No dia seguinte entrou a dizer de mim nomes feios, e acabou alcunhando-me Dom Casmurro. Os vizinhos, que não gostam dos meus hábitos reclusos e calados, deram curso à alcunha, que afinal pegou.' },
-    { ch: 'II · Do livro', short: 'Capítulo II', text: 'Agora que expliquei o título, passo a escrever o livro. Antes disso, porém, digamos os motivos que me põem a pena na mão.' },
-  ];
-  const LAST = FIRST + PAGES.length - 1;
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  /* ==================================================== Idiomas
+   * O português está escrito no HTML (é o que buscadores e quem abre sem JS veem).
+   * O inglês fica em EN. Cada elemento traduzível tem data-i18n="chave" (conteúdo, pode ter
+   * marcação inline) ou data-i18n-aria="chave" (aria-label). Ao mudar um texto em PT no HTML,
+   * atualize a mesma chave aqui.
+   */
+  const EN = {
+    'meta.description': 'A book and comic reader that uses your PC as the server. Close the book on your computer and open it on your phone on the same page, over your home network, with no account and no third-party cloud.',
+    'nav.home': 'Bookferry, home',
+    'nav.how': 'How it works',
+    'nav.reading': 'Reading',
+    'nav.privacy': 'Privacy',
+    'nav.platforms': 'Platforms',
+    'nav.lang': 'Language',
+    'nav.code': 'Code',
+    'nav.codeAria': 'Code on GitHub',
+    'hero.eyebrow': 'Book and comic reader · PC and Android',
+    'hero.title': 'Close the book on your computer. Open it on your phone <em>on the same page.</em>',
+    'hero.lead': 'Bookferry keeps your library on <strong>your</strong> PC and carries the spot where you stopped to your phone over your home network. No account, no subscription, no third-party cloud.',
+    'hero.cta2': 'Linux and Android',
+    'demo.aria': 'Demo of syncing between PC and phone',
+    'demo.labelPc': 'your PC',
+    'demo.labelPhone': 'phone',
+    'demo.prevPc': 'Previous page on PC',
+    'demo.nextPc': 'Next page on PC',
+    'demo.prevPhone': 'Previous page on phone',
+    'demo.nextPhone': 'Next page on phone',
+    'demo.immersive': 'Show or hide the phone controls',
+    'demo.hint': '<b>Try it:</b> tap the right edge of either screen to turn the page.',
+    'how.title': 'Your PC is the server. Your phone is the pocket reader.',
+    'how.lead': 'There is no server of ours in the middle. The desktop app has the server built in, and your phone talks to it directly.',
+    'tree.root': '~/Books',
+    'tree.author': 'Herman Melville',
+    'tree.b1': 'Moby-Dick',
+    'tree.b2': 'Bartleby',
+    'tree.comics': 'Comics',
+    'how.s1t': 'Pick your books folder',
+    'how.s1d': 'On your computer, point to the folder where your EPUB, PDF and CBZ files live. Bookferry starts the local server and builds the library, subfolders included.',
+    'how.expires': 'expires in',
+    'how.pinned': 'pinned certificate',
+    'how.s2t': 'Pair with a QR code',
+    'how.s2d': 'On your phone, scan the QR code shown in the PC’s Settings. No account, no password: the phone stores your computer’s certificate and only talks to it.',
+    'how.closedPc': 'Closed on PC',
+    'how.openedPhone': 'Opened on phone',
+    'how.p50': 'p. 50',
+    'how.s3t': 'Read wherever you are',
+    'how.s3d': 'Download a book to your phone whenever you like. Every page you turn goes to the other device, and whoever opens the book next picks up from there.',
+    'read.title': 'A real reader, for books and comics.',
+    'read.lead': 'EPUB with text that fits the screen, PDF page by page, and comics with two-page spreads and right-to-left reading for manga.',
+    'read.formats': 'Formats',
+    'read.soon': 'outlined ones are coming next',
+    'read.f1t': 'Per-book Aa panel',
+    'read.f1d': 'Font, size, margins and theme are saved for each book, with presets to switch quickly.',
+    'read.f2t': 'Light, dark and sepia',
+    'read.f2d': 'Themes made for reading at night without lighting up the whole room.',
+    'read.f3t': 'Three tap zones',
+    'read.f3d': 'The left 30% of the screen goes back, the middle 40% shows the controls, the right 30% goes forward. On Android, the volume keys turn pages too.',
+    'read.f4t': 'Immersive mode',
+    'read.f4d': 'Full screen with no bars, plus keyboard shortcuts on the computer.',
+    'read.f5t': 'Missing covers',
+    'read.f5d': 'Finds the cover on Open Library by the book’s title, or uses an image you pick.',
+    'read.f6t': 'Exact position',
+    'read.f6d': 'In EPUB the position is an <code>epubcfi</code>, not a percentage. In PDF and CBZ, it is the page number.',
+    'shelf.aria': 'Library example',
+    'shelf.continue': 'Continue reading',
+    'shelf.example': 'example',
+    'shelf.c0': 'Moby-Dick',
+    'shelf.c0author': 'Herman Melville',
+    'shelf.c0when': '· on phone 12 min ago',
+    'shelf.cta': 'Continue',
+    'shelf.library': 'Library',
+    'shelf.count': '4 of 212 books',
+    'shelf.b1': 'Pride and Prejudice',
+    'shelf.b1i': 'P',
+    'shelf.new': 'New',
+    'shelf.comics': '· Comics',
+    'shelf.b3': 'Frankenstein',
+    'shelf.b3i': 'F',
+    'shelf.done': 'Finished',
+    'shelf.b4': 'The Odyssey',
+    'shelf.b4i': 'T',
+    'priv.eyebrow': 'Privacy and sync',
+    'priv.title': 'Your books never leave home.',
+    'priv.lead': 'Your library and database stay on your computer. The phone finds the PC on your Wi‑Fi and talks to it over an encrypted connection. Nobody but you knows what you are reading.',
+    'priv.topoAria': 'The phone connects to the PC over your home Wi-Fi with an encrypted connection. An optional relay for use away from home is coming next.',
+    'priv.phone': 'Phone',
+    'priv.phoneNote': 'downloaded books<br />change queue',
+    'priv.link': 'Home Wi‑Fi<br />TLS · mDNS',
+    'priv.pc': 'Your PC',
+    'priv.pcNote': 'library<br />server + SQLite',
+    'priv.relay': '<b>Away from home:</b> an optional relay that only forwards end-to-end encrypted bytes. It stores and reads nothing.',
+    'priv.soon': 'next',
+    'priv.limit': '<b>The cost of not depending on a cloud:</b> with the PC turned off, the phone can’t sync or download new books. Books already on it keep opening normally.',
+    'priv.f1t': 'Reading offline? That’s fine.',
+    'priv.f1d': 'On the bus or on a plane, every page you turn waits in a queue on the phone. When the PC shows up on the network, the queue goes to it on its own.',
+    'priv.f2t': 'When you read on both devices',
+    'priv.f2d': 'If the other device has a newer position that is behind yours, Bookferry asks before taking you back.',
+    'priv.resumeAria': 'Example of the resume prompt',
+    'priv.resumeT': 'Pick up where you left off?',
+    'priv.resumeD': 'On the PC you stopped at p. 42, 5 min ago. On this phone you are at p. 50.',
+    'priv.stay': 'Stay here',
+    'priv.go': 'Continue there',
+    'priv.f3t': 'No account to create',
+    'priv.f3d': 'Pairing is the QR code and nothing else. To remove a device, revoke it in the PC’s Settings.',
+    'plat.title': 'Where it runs today, and what comes next.',
+    'plat.lead': 'Bookferry is at its first version. Here is the plain list.',
+    'plat.linux': 'Desktop app with a built-in server. Includes a <code>NixOS</code> module.',
+    'plat.android': 'Reader and sync client, with on-demand book downloads.',
+    'plat.relayT': 'Reading away from home',
+    'plat.relayD': 'A stateless, end-to-end encrypted relay to sync when you are away from your home network.',
+    'plat.fmtT': 'More formats',
+    'plat.fmtD': '<code>CBR</code>, <code>CB7</code>, <code>MOBI</code>, <code>AZW3</code> and <code>FB2</code>, comic series and a synced “Read next” list.',
+    'plat.winT': 'Windows and macOS',
+    'plat.winD': 'The app is built with Tauri and Rust, so the path is there. It has not been tested yet.',
+    'plat.notesT': 'Highlights, notes and read-aloud',
+    'plat.notesD': 'Only once sync is solid.',
+    'st.early': 'Early version',
+    'st.next': 'Next',
+    'st.planned': 'Planned',
+    'st.later': 'Later',
+    'end.title': 'Your page travels with you.',
+    'end.lead': 'Follow development, read the code and try the early version on Linux and Android.',
+    'end.cta': 'View on GitHub',
+    'end.credits': 'Sample text: <i>Moby-Dick</i>, Herman Melville (1851), public domain. Typeface: Literata, <a href="fonts/OFL.txt">SIL OFL 1.1</a>.',
+  };
 
+  // Livro da demonstração em cada idioma (textos em domínio público)
+  const DEMO = {
+    pt: {
+      title: 'Dom Casmurro',
+      byline: 'Machado de Assis · EPUB',
+      total: 256,
+      first: 9,
+      pages: [
+        { ch: 'I · Do título', short: 'Capítulo I', text: 'Uma noite destas, vindo da cidade para o Engenho Novo, encontrei no trem da Central um rapaz aqui do bairro, que eu conheço de vista e de chapéu. Cumprimentou-me, sentou-se ao pé de mim, falou da lua e dos ministros, e acabou recitando-me versos.' },
+        { ch: 'I · Do título', short: 'Capítulo I', text: 'A viagem era curta, e os versos pode ser que não fossem inteiramente maus. Sucedeu, porém, que, como eu estava cansado, fechei os olhos três ou quatro vezes; tanto bastou para que ele interrompesse a leitura e metesse os versos no bolso.' },
+        { ch: 'I · Do título', short: 'Capítulo I', text: '— Continue, disse eu acordando. — Já acabei, murmurou ele. — São muito bonitos. Vi-lhe fazer um gesto para tirá-los outra vez do bolso, mas não passou do gesto; estava amuado.' },
+        { ch: 'I · Do título', short: 'Capítulo I', text: 'No dia seguinte entrou a dizer de mim nomes feios, e acabou alcunhando-me Dom Casmurro. Os vizinhos, que não gostam dos meus hábitos reclusos e calados, deram curso à alcunha, que afinal pegou.' },
+        { ch: 'II · Do livro', short: 'Capítulo II', text: 'Agora que expliquei o título, passo a escrever o livro. Antes disso, porém, digamos os motivos que me põem a pena na mão.' },
+      ],
+      page: (p, t) => `pág. ${p} de ${t}`,
+      pageShort: (p) => `pág. ${p}`,
+      online: 'Conectado',
+      syncing: 'Sincronizando',
+      pc: 'PC',
+      phone: 'celular',
+      updated: (who) => `${who} atualizado`,
+      inSync: 'os dois aparelhos em dia',
+    },
+    en: {
+      title: 'Moby-Dick',
+      byline: 'Herman Melville · EPUB',
+      total: 635,
+      first: 7,
+      pages: [
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'Call me Ishmael. Some years ago—never mind how long precisely—having little or no money in my purse, and nothing particular to interest me on shore, I thought I would sail about a little and see the watery part of the world.' },
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'It is a way I have of driving off the spleen, and regulating the circulation. Whenever I find myself growing grim about the mouth; whenever it is a damp, drizzly November in my soul; … then, I account it high time to get to sea as soon as I can.' },
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'This is my substitute for pistol and ball. With a philosophical flourish Cato throws himself upon his sword; I quietly take to the ship. There is nothing surprising in this.' },
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'There now is your insular city of the Manhattoes, belted round by wharves as Indian isles by coral reefs—commerce surrounds it with her surf.' },
+        { ch: '2 · The Carpet-Bag', short: 'Chapter 2', text: 'I stuffed a shirt or two into my old carpet-bag, tucked it under my arm, and started for Cape Horn and the Pacific.' },
+      ],
+      page: (p, t) => `p. ${p} of ${t}`,
+      pageShort: (p) => `p. ${p}`,
+      online: 'Connected',
+      syncing: 'Syncing',
+      pc: 'PC',
+      phone: 'phone',
+      updated: (who) => `${who} updated`,
+      inSync: 'both devices in sync',
+    },
+  };
+
+  const store = {
+    get() { try { return localStorage.getItem('bookferry-lang'); } catch { return null; } },
+    set(v) { try { localStorage.setItem('bookferry-lang', v); } catch { /* sem armazenamento */ } },
+  };
+
+  const textNodes = Array.from(document.querySelectorAll('[data-i18n]'));
+  const ariaNodes = Array.from(document.querySelectorAll('[data-i18n-aria]'));
+  const metaDesc = document.querySelector('meta[name="description"]');
+  const PT = { 'meta.description': metaDesc ? metaDesc.content : '' };
+  textNodes.forEach((el) => { PT[el.dataset.i18n] = el.innerHTML; });
+  ariaNodes.forEach((el) => { PT[el.dataset.i18nAria] = el.getAttribute('aria-label'); });
+
+  let lang = 'pt';
+
+  function applyLang(next, opts = {}) {
+    lang = next === 'en' ? 'en' : 'pt';
+    const dict = lang === 'en' ? EN : PT;
+    textNodes.forEach((el) => {
+      const v = dict[el.dataset.i18n];
+      if (v != null) el.innerHTML = v;
+    });
+    ariaNodes.forEach((el) => {
+      const v = dict[el.dataset.i18nAria];
+      if (v != null) el.setAttribute('aria-label', v);
+    });
+    if (metaDesc) metaDesc.content = dict['meta.description'];
+    document.documentElement.lang = lang === 'en' ? 'en' : 'pt-BR';
+    document.querySelectorAll('[data-set-lang]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.setLang === lang));
+    });
+    demo.setLang(lang);
+    if (opts.remember) {
+      store.set(lang);
+      try {
+        const url = new URL(location.href);
+        if (lang === 'en') url.searchParams.set('lang', 'en');
+        else url.searchParams.delete('lang');
+        history.replaceState(null, '', url);
+      } catch { /* sem history (ex.: sandbox) */ }
+    }
+  }
+
+  function initialLang() {
+    try {
+      const q = new URLSearchParams(location.search).get('lang');
+      if (q === 'en' || q === 'pt') return q;
+    } catch { /* ignora */ }
+    const saved = store.get();
+    if (saved === 'en' || saved === 'pt') return saved;
+    const langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'pt'];
+    return String(langs[0]).toLowerCase().startsWith('pt') ? 'pt' : 'en';
+  }
+
+  /* ==================================================== Demonstração */
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   const stage = document.getElementById('stage');
   const ferry = document.getElementById('ferry');
   const log = document.getElementById('log');
@@ -1484,113 +1752,137 @@ footer.foot {
     pc: document.getElementById('dev-pc'),
     phone: document.getElementById('dev-phone'),
   };
-  const page = { pc: FIRST, phone: FIRST };
-  let timer = 0;
-
   const q = (root, sel) => root.querySelector(sel);
   const qa = (root, sel) => Array.from(root.querySelectorAll(sel));
-  const cfi = (p) => `epubcfi(/6/${p - FIRST < 4 ? 4 : 6}!/4/${2 + 2 * ((p - FIRST) % 4)}/1:0)`;
 
-  function render(which, animate) {
-    const root = dev[which];
-    const p = page[which];
-    const data = PAGES[p - FIRST];
-    const prose = q(root, '[data-prose]');
-    const apply = () => {
-      prose.textContent = data.text;
-      q(root, '[data-chapter]').textContent = data.ch;
-      const short = q(root, '[data-chapter-short]');
-      if (short) short.textContent = data.short;
-      prose.classList.remove('is-turning');
+  const demo = (() => {
+    let book = DEMO.pt;
+    const page = { pc: book.first, phone: book.first };
+    let timer = 0;
+    let docked = 'pc';
+    const last = () => book.first + book.pages.length - 1;
+    const cfi = (p) => {
+      const i = p - book.first;
+      return `epubcfi(/6/${i < 4 ? 4 : 6}!/4/${2 + 2 * (i % 4)}/1:0)`;
     };
-    if (animate && !reduced.matches) {
-      prose.classList.add('is-turning');
-      setTimeout(apply, 170);
-    } else {
-      apply();
+
+    function render(which, animate) {
+      const root = dev[which];
+      const p = page[which];
+      const data = book.pages[p - book.first];
+      const prose = q(root, '[data-prose]');
+      const apply = () => {
+        prose.textContent = data.text;
+        q(root, '[data-chapter]').textContent = data.ch;
+        const short = q(root, '[data-chapter-short]');
+        if (short) short.textContent = data.short;
+        prose.classList.remove('is-turning');
+      };
+      if (animate && !reduced.matches) {
+        prose.classList.add('is-turning');
+        setTimeout(apply, 170);
+      } else {
+        apply();
+      }
+      q(root, '[data-track]').style.width = ((p / book.total) * 100).toFixed(1) + '%';
+      const full = q(root, '[data-page]');
+      if (full) full.textContent = book.page(p, book.total);
+      const short = q(root, '[data-page-short]');
+      if (short) short.textContent = `${p}/${book.total}`;
+      qa(root, '[data-turn]').forEach((b) => {
+        const d = Number(b.dataset.turn);
+        b.disabled = (d < 0 && p <= book.first) || (d > 0 && p >= last());
+      });
     }
-    const pct = (p / TOTAL) * 100;
-    q(root, '[data-track]').style.width = pct.toFixed(1) + '%';
-    const full = q(root, '[data-page]');
-    if (full) full.textContent = `pág. ${p} de ${TOTAL}`;
-    const short = q(root, '[data-page-short]');
-    if (short) short.textContent = `${p}/${TOTAL}`;
-    qa(root, '[data-turn]').forEach((b) => {
-      const d = Number(b.dataset.turn);
-      b.disabled = (d < 0 && p <= FIRST) || (d > 0 && p >= LAST);
-    });
-  }
 
-  function setPills(state) {
-    qa(stage, '[data-pill]').forEach((pill) => {
-      pill.classList.toggle('is-syncing', state === 'syncing');
-      q(pill, '[data-pill-text]').textContent = state === 'syncing' ? 'Sincronizando' : 'Conectado';
-    });
-  }
+    let pillState = 'online';
+    function setPills(state) {
+      pillState = state;
+      qa(stage, '[data-pill]').forEach((pill) => {
+        pill.classList.toggle('is-syncing', state === 'syncing');
+        q(pill, '[data-pill-text]').textContent = state === 'syncing' ? book.syncing : book.online;
+      });
+    }
 
-  // Centro horizontal de cada aparelho, relativo ao palco, menos metade da balsa
-  function dockX(which) {
-    const s = stage.getBoundingClientRect();
-    const d = dev[which].getBoundingClientRect();
-    return d.left - s.left + d.width / 2 - ferry.offsetWidth / 2;
-  }
-  function dock(which, instant) {
-    if (instant) ferry.style.transition = 'none';
-    ferry.style.setProperty('--x', dockX(which) + 'px');
-    if (instant) { void ferry.offsetWidth; ferry.style.transition = ''; }
-  }
+    // Centro horizontal de cada aparelho, relativo ao palco, menos metade da balsa
+    function dockX(which) {
+      const s = stage.getBoundingClientRect();
+      const d = dev[which].getBoundingClientRect();
+      return d.left - s.left + d.width / 2 - ferry.offsetWidth / 2;
+    }
+    function dock(which, instant) {
+      if (instant) ferry.style.transition = 'none';
+      ferry.style.setProperty('--x', dockX(which) + 'px');
+      if (instant) { void ferry.offsetWidth; ferry.style.transition = ''; }
+    }
 
-  let docked = 'pc';
-  function turn(from, delta) {
-    const to = from === 'pc' ? 'phone' : 'pc';
-    const next = Math.min(LAST, Math.max(FIRST, page[from] + delta));
-    if (next === page[from]) return;
-    page[from] = next;
-    render(from, true);
+    function turn(from, delta) {
+      const to = from === 'pc' ? 'phone' : 'pc';
+      const next = Math.min(last(), Math.max(book.first, page[from] + delta));
+      if (next === page[from]) return;
+      page[from] = next;
+      render(from, true);
 
-    clearTimeout(timer);
-    setPills('syncing');
-    // a balsa parte do aparelho onde a página virou
-    if (docked !== from) dock(from, true);
-    ferry.classList.toggle('is-flipped', from === 'phone');
-    requestAnimationFrame(() => dock(to, false));
-    docked = to;
+      clearTimeout(timer);
+      setPills('syncing');
+      // a balsa parte do aparelho onde a página virou
+      if (docked !== from) dock(from, true);
+      ferry.classList.toggle('is-flipped', from === 'phone');
+      requestAnimationFrame(() => dock(to, false));
+      docked = to;
 
-    const fromName = from === 'pc' ? 'PC' : 'celular';
-    const toName = to === 'pc' ? 'PC' : 'celular';
-    log.textContent = `${fromName} → ${toName} · pág. ${next} · ${cfi(next)}`;
+      log.textContent = `${book[from]} → ${book[to]} · ${book.pageShort(next)} · ${cfi(next)}`;
+      timer = setTimeout(() => {
+        page[to] = next;
+        render(to, true);
+        setPills('online');
+        log.textContent = `${book.pageShort(next)} · ${cfi(next)} · ${book.updated(book[to])}`;
+      }, reduced.matches ? 150 : 1100);
+    }
 
-    timer = setTimeout(() => {
-      page[to] = next;
-      render(to, true);
+    function setLang(l) {
+      clearTimeout(timer);
+      book = DEMO[l];
+      page.pc = page.phone = book.first;
+      qa(stage, '[data-book-title]').forEach((el) => { el.textContent = book.title; });
+      qa(stage, '[data-book-byline]').forEach((el) => { el.textContent = book.byline; });
+      render('pc', false);
+      render('phone', false);
       setPills('online');
-      log.textContent = `pág. ${next} · ${cfi(next)} · ${toName} atualizado`;
-    }, reduced.matches ? 150 : 1100);
-  }
-
-  stage.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn || btn.disabled) return;
-    const which = btn.closest('#dev-pc') ? 'pc' : 'phone';
-    if (btn.dataset.turn) turn(which, Number(btn.dataset.turn));
-    if (btn.hasAttribute('data-immersive')) dev.phone.classList.toggle('is-immersive');
-  });
-  stage.addEventListener('keydown', (e) => {
-    const inPhone = e.target.closest && e.target.closest('#dev-phone');
-    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-      if (!e.target.closest || !e.target.closest('#stage')) return;
-      e.preventDefault();
-      turn(inPhone ? 'phone' : 'pc', e.key === 'ArrowRight' ? 1 : -1);
+      log.textContent = `${book.pageShort(book.first)} · ${cfi(book.first)} · ${book.inSync}`;
+      if (docked !== 'pc') { docked = 'pc'; ferry.classList.remove('is-flipped'); }
+      dock('pc', true);
     }
+
+    stage.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.disabled) return;
+      const which = btn.closest('#dev-pc') ? 'pc' : 'phone';
+      if (btn.dataset.turn) turn(which, Number(btn.dataset.turn));
+      if (btn.hasAttribute('data-immersive')) dev.phone.classList.toggle('is-immersive');
+    });
+    stage.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      const inPhone = e.target.closest && e.target.closest('#dev-phone');
+      turn(inPhone ? 'phone' : 'pc', e.key === 'ArrowRight' ? 1 : -1);
+    });
+    window.addEventListener('resize', () => dock(docked, true));
+
+    return { setLang };
+  })();
+
+  /* ==================================================== Início */
+  document.querySelectorAll('[data-set-lang]').forEach((b) => {
+    b.addEventListener('click', () => {
+      if (b.dataset.setLang !== lang) applyLang(b.dataset.setLang, { remember: true });
+    });
   });
+  applyLang(initialLang());
+  document.documentElement.classList.remove('lang-wait');
 
-  render('pc', false);
-  render('phone', false);
-  dock('pc', true);
-  window.addEventListener('resize', () => dock(docked, true));
-
-  const clock = q(dev.phone, '[data-clock]');
   const pad = (n) => String(n).padStart(2, '0');
+  const clock = q(dev.phone, '[data-clock]');
   const tick = () => { const d = new Date(); clock.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   tick();
   setInterval(tick, 30000);

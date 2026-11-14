@@ -26,7 +26,33 @@ Abra `http://localhost:8080`.
   recursos listados são os que o app já tem, e a seção Plataformas diz o que ainda não existe.
   Ao mudar o produto, atualize essa lista.
 
-## Publicar
+## Idiomas (PT / EN)
 
-Qualquer hospedagem de arquivos estáticos serve (GitHub Pages, Cloudflare Pages, um Nginx). A pasta
-inteira é o site; não há passo de build.
+O botão PT/EN fica na barra do topo. O português está escrito no HTML (é o que buscadores e quem
+abre sem JS veem); o inglês fica no objeto `EN` do script, no fim do `index.html`.
+
+- Cada texto traduzível tem `data-i18n="chave"` (pode ter marcação inline, como `<em>` ou `<code>`)
+  ou `data-i18n-aria="chave"` (para `aria-label`).
+- **Ao mudar um texto em português, atualize a mesma chave em `EN`.** Ao criar um texto novo, dê
+  uma chave nova e coloque a tradução.
+- O livro da demonstração muda junto: *Dom Casmurro* em PT, *Moby-Dick* em EN (objeto `DEMO`).
+- O idioma vem, nesta ordem: `?lang=en` ou `?lang=pt` na URL, a última escolha (guardada no
+  navegador) e o idioma do navegador (português → PT, qualquer outro → EN).
+
+## Publicar no GitHub Pages
+
+O workflow `.github/workflows/pages.yml` publica a pasta `site/` a cada push na `main` que altere o
+site (ou pelo botão "Run workflow" na aba Actions).
+
+1. Em **Settings → Pages → Build and deployment**, escolha **Source: GitHub Actions**.
+2. Faça merge na `main`. O endereço aparece no resumo do workflow:
+   `https://caspiom.github.io/bookferry/`.
+
+O GitHub Pages em repositório **privado** só funciona nos planos pagos (Pro, Team, Enterprise). No
+plano gratuito, o repositório precisa ser público.
+
+Domínio próprio (ex.: `bookferry.gaspari.dev`): crie um registro `CNAME` apontando para
+`caspiom.github.io`, informe o domínio em Settings → Pages e marque "Enforce HTTPS".
+
+A página usa só caminhos relativos, então funciona tanto em `/bookferry/` quanto na raiz de um
+domínio.
