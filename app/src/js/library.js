@@ -259,6 +259,11 @@ function renderBreadcrumb(path) {
   });
 }
 
+/** Pasta aberta agora (string vazia = raiz). */
+export function getCurrentFolder() {
+  return currentFolder;
+}
+
 /**
  * Abre uma pasta da biblioteca. Empilha no historico do webview para o botao "voltar"
  * (Android) subir um nivel em vez de fechar o app.

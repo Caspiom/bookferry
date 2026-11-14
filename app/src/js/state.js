@@ -701,32 +701,85 @@ export function resolveTapZone(x, width, direction = 'ltr') {
 }
 
 /**
- * Ação de teclado do leitor (desktop). `Escape`/`F11`/`f`/Ctrl+= / Ctrl+- incluídos.
+ * Ação de teclado do leitor (desktop). Os atalhos seguem os leitores populares (SumatraPDF, Evince,
+ * Okular, calibre, MComix); a lista completa está em `docs/atalhos` do site e na ajuda (`?`).
+ *
+ * Teclas de seta devolvem a direção FÍSICA (`arrow-*`): com zoom elas movem a página, sem zoom
+ * viram virada de página (ver `arrowFallbackAction`). As demais devolvem a ação já resolvida.
  * @param {{key: string, shiftKey?: boolean, ctrlKey?: boolean, altKey?: boolean, metaKey?: boolean}} ev
- * @param {'ltr'|'rtl'} [direction]
- * @returns {'next'|'prev'|'toggle-immersive'|'toggle-fullscreen'|'escape'|'font-inc'|'font-dec'|null}
+ * @returns {'next'|'prev'|'first'|'last'|'arrow-left'|'arrow-right'|'arrow-up'|'arrow-down'
+ *   |'zoom-in'|'zoom-out'|'zoom-reset'|'toggle-fit'|'toggle-toc'|'goto'|'help'
+ *   |'toggle-immersive'|'toggle-fullscreen'|'escape'|null}
  */
-export function resolveKeyAction(ev, direction = 'ltr') {
+export function resolveKeyAction(ev) {
   if (!ev || typeof ev.key !== 'string') return null;
   if (ev.altKey || ev.metaKey) return null;
-  const rtl = direction === 'rtl';
   if (ev.ctrlKey) {
-    if (ev.key === '=' || ev.key === '+') return 'font-inc';
-    if (ev.key === '-' || ev.key === '_') return 'font-dec';
-    return null;
+    switch (ev.key) {
+      case '=':
+      case '+':
+        return 'zoom-in';
+      case '-':
+      case '_':
+        return 'zoom-out';
+      case '0':
+        return 'zoom-reset';
+      case 'g':
+      case 'G':
+        return 'goto';
+      case 'ArrowDown':
+        return 'next';
+      case 'ArrowUp':
+        return 'prev';
+      default:
+        return null;
+    }
   }
   switch (ev.key) {
     case 'ArrowRight':
-      return rtl ? 'prev' : 'next';
+      return 'arrow-right';
     case 'ArrowLeft':
-      return rtl ? 'next' : 'prev';
+      return 'arrow-left';
+    case 'ArrowDown':
+      return 'arrow-down';
+    case 'ArrowUp':
+      return 'arrow-up';
     case 'PageDown':
+    case 'n':
+    case 'N':
       return 'next';
     case 'PageUp':
+    case 'p':
+    case 'P':
+    case 'Backspace':
       return 'prev';
     case ' ':
     case 'Spacebar':
       return ev.shiftKey ? 'prev' : 'next';
+    case 'Home':
+      return 'first';
+    case 'End':
+      return 'last';
+    case '+':
+    case '=':
+      return 'zoom-in';
+    case '-':
+    case '_':
+      return 'zoom-out';
+    case '0':
+      return 'zoom-reset';
+    case 'w':
+    case 'W':
+      return 'toggle-fit';
+    case 't':
+    case 'T':
+      return 'toggle-toc';
+    case 'g':
+    case 'G':
+      return 'goto';
+    case '?':
+    case 'F1':
+      return 'help';
     case 'f':
     case 'F':
       return 'toggle-immersive';
@@ -737,6 +790,161 @@ export function resolveKeyAction(ev, direction = 'ltr') {
     default:
       return null;
   }
+}
+
+/**
+ * O que uma seta faz quando a página NÃO pode ser movida (sem zoom): virar a página.
+ * Esquerda/direita seguem o sentido de leitura (mangá/RTL inverte); cima/baixo voltam/avançam.
+ * @param {'arrow-left'|'arrow-right'|'arrow-up'|'arrow-down'} action
+ * @param {'ltr'|'rtl'} [direction]
+ * @returns {'next'|'prev'|null}
+ */
+export function arrowFallbackAction(action, direction = 'ltr') {
+  const rtl = direction === 'rtl';
+  switch (action) {
+    case 'arrow-right':
+      return rtl ? 'prev' : 'next';
+    case 'arrow-left':
+      return rtl ? 'next' : 'prev';
+    case 'arrow-down':
+      return 'next';
+    case 'arrow-up':
+      return 'prev';
+    default:
+      return null;
+  }
+}
+
+/** Quanto uma seta move a página ampliada (px). Shift não muda: Sumatra usa Shift para "mais rápido". */
+export const ARROW_PAN_STEP_PX = 60;
+
+/**
+ * Deslocamento (px) que uma seta aplica à página ampliada: positivo = move o conteúdo para a
+ * direita/baixo, como arrastar com o mouse.
+ * @param {string} action
+ * @returns {{dx: number, dy: number}|null}
+ */
+export function arrowPanDelta(action) {
+  const step = ARROW_PAN_STEP_PX;
+  switch (action) {
+    case 'arrow-left':
+      return { dx: step, dy: 0 };
+    case 'arrow-right':
+      return { dx: -step, dy: 0 };
+    case 'arrow-up':
+      return { dx: 0, dy: step };
+    case 'arrow-down':
+      return { dx: 0, dy: -step };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Atalhos da biblioteca (tela inicial no desktop). Só valem com a biblioteca à vista, sem
+ * modal aberto e sem foco em campo de texto (quem chama confere isso).
+ * @param {{key: string, shiftKey?: boolean, ctrlKey?: boolean, altKey?: boolean, metaKey?: boolean}} ev
+ * @returns {'search'|'refresh'|'settings'|'help'|'up'|null}
+ */
+export function resolveLibraryKeyAction(ev) {
+  if (!ev || typeof ev.key !== 'string') return null;
+  if (ev.metaKey) return null;
+  if (ev.ctrlKey && !ev.altKey) {
+    switch (ev.key) {
+      case 'f':
+      case 'F':
+        return 'search';
+      case 'r':
+      case 'R':
+        return 'refresh';
+      case ',':
+        return 'settings';
+      default:
+        return null;
+    }
+  }
+  if (ev.altKey) return ev.key === 'ArrowLeft' && !ev.ctrlKey ? 'up' : null;
+  switch (ev.key) {
+    case '/':
+      return 'search';
+    case 'F5':
+      return 'refresh';
+    case '?':
+    case 'F1':
+      return 'help';
+    case 'Backspace':
+      return 'up';
+    default:
+      return null;
+  }
+}
+
+/** Pasta pai de um caminho da biblioteca (`a/b` -> `a`; `a` -> ``; `` -> ``). */
+export function parentFolderPath(path) {
+  const parts = String(path ?? '').split('/').filter(Boolean);
+  return parts.slice(0, -1).join('/');
+}
+
+/**
+ * Converte o roteiro de uma roda do mouse/trackpad em pixels (`deltaMode` 1 = linhas, 2 = páginas).
+ * @param {{deltaY?: number, deltaMode?: number}} ev
+ */
+export function normalizeWheelDelta(ev) {
+  const dy = Number(ev?.deltaY);
+  if (!Number.isFinite(dy)) return 0;
+  if (ev.deltaMode === 1) return dy * 16;
+  if (ev.deltaMode === 2) return dy * 400;
+  return dy;
+}
+
+/**
+ * Vira a roda do mouse em viradas de página sem pular várias de uma vez:
+ * - acumula `deltaY` até `threshold` (uma "marcha" de mouse ~100 px vira 1 página; trackpad
+ *   precisa de um deslize maior);
+ * - depois de virar, ignora a roda por `cooldownMs` (a inércia do trackpad não vira 5 páginas);
+ * - pausa maior que `gestureGapMs` ou mudança de sentido zera o acumulado.
+ * Puro: quem chama passa o relógio, então dá para testar sem timers.
+ * @param {{threshold?: number, cooldownMs?: number, gestureGapMs?: number}} [opts]
+ * @returns {{ feed: (deltaPx: number, nowMs: number) => -1|0|1, reset: () => void }}
+ */
+export function createWheelPager({ threshold = 40, cooldownMs = 220, gestureGapMs = 180 } = {}) {
+  let acc = 0;
+  let lastEventAt = -Infinity;
+  let lastFireAt = -Infinity;
+  return {
+    feed(deltaPx, nowMs) {
+      const d = Number(deltaPx);
+      if (!Number.isFinite(d) || d === 0) return 0;
+      if (nowMs - lastEventAt > gestureGapMs || Math.sign(d) !== Math.sign(acc)) acc = 0;
+      lastEventAt = nowMs;
+      if (nowMs - lastFireAt < cooldownMs) return 0;
+      acc += d;
+      if (Math.abs(acc) < threshold) return 0;
+      const dir = acc > 0 ? 1 : -1;
+      acc = 0;
+      lastFireAt = nowMs;
+      return dir;
+    },
+    reset() {
+      acc = 0;
+      lastEventAt = -Infinity;
+      lastFireAt = -Infinity;
+    },
+  };
+}
+
+/**
+ * Interpreta o texto de "Ir para...": número de página (PDF/CBZ) ou percentual (EPUB).
+ * Aceita "42", " 42 ", "42%" (o % é ignorado). Fora da faixa vira o limite mais próximo.
+ * @param {string} text
+ * @param {number} max último valor válido (total de páginas, ou 100)
+ * @returns {number|null} inteiro em [1, max] (ou [0, max] com `min = 0`), ou null se inválido
+ */
+export function parseGotoTarget(text, max, min = 1) {
+  const m = String(text ?? '').trim().match(/^(\d{1,7})\s*%?$/);
+  if (!m) return null;
+  const hi = Math.max(min, Math.floor(Number(max)) || min);
+  return Math.max(min, Math.min(hi, Number(m[1])));
 }
 
 /** Formatos do texto de progresso em PDF/CBZ (cada clique cicla). */

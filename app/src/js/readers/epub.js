@@ -105,6 +105,8 @@ export async function mountEpubReader({
     const doc = ev.detail?.doc;
     if (!doc) return;
     doc.addEventListener('keydown', (kev) => hooks.onKey?.(kev));
+    // Roda do mouse vira a página; Ctrl+roda muda o tamanho da fonte (tratado em reader-chrome).
+    doc.addEventListener('wheel', (wev) => hooks.onWheel?.(wev), { passive: false });
     doc.addEventListener('click', (cev) => {
       hooks.onDismissOverlays?.();
       // Link do livro (o foliate trata e dá preventDefault) ou controle: não vira navegação.

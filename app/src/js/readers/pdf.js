@@ -8,6 +8,8 @@ import {
   createDebouncer,
   formatPageLocator,
   formatPercent,
+  normalizeWheelDelta,
+  panLimits,
   parsePageLocator,
   resolveTapZone,
 } from '../state.js';
@@ -93,6 +95,36 @@ export async function mountPdfReader({
     statusLabelEl.textContent = `Pág. ${currentPage} / ${totalPages} (${formatPercent(pct)}) · ${zoomPct}%`;
   }
 
+  // Depois de renderizar uma página nova (ou mudar o encaixe), mostra o TOPO dela: no encaixe
+  // "largura" a página é mais alta que a tela e, centralizada, abriria no meio.
+  let pendingTopAlign = true;
+
+  /** Limites do deslocamento (px) com o tamanho atual da página na tela. */
+  function currentPanLimits() {
+    const rel = zoomScale / renderedScale;
+    return panLimits(
+      canvas.offsetWidth * rel,
+      canvas.offsetHeight * rel,
+      stageEl.clientWidth,
+      stageEl.clientHeight,
+    );
+  }
+
+  /**
+   * Move a página (roda do mouse / setas). Devolve true se ela se mexeu; false quando já está no
+   * limite (ou cabe inteira na tela), e aí quem chamou vira a página.
+   */
+  function panBy(dx, dy) {
+    const { limX, limY } = currentPanLimits();
+    const nx = Math.max(-limX, Math.min(limX, tx + dx));
+    const ny = Math.max(-limY, Math.min(limY, ty + dy));
+    if (nx === tx && ny === ty) return false;
+    tx = nx;
+    ty = ny;
+    applyCssTransform();
+    return true;
+  }
+
   function applyCssTransform() {
     const relativeScale = zoomScale / renderedScale;
     canvasWrap.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${relativeScale})`;
@@ -133,6 +165,11 @@ export async function mountPdfReader({
     try {
       await activeRenderTask.promise;
       renderedScale = targetZoom;
+      if (pendingTopAlign) {
+        pendingTopAlign = false;
+        tx = 0;
+        ty = currentPanLimits().limY;
+      }
       canvasWrap.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(1)`;
     } catch (_) {
       // Renderização cancelada por nova mudança de página/zoom
@@ -154,6 +191,7 @@ export async function mountPdfReader({
     if (zoomScale <= 1.02) {
       tx = 0;
       ty = 0;
+      pendingTopAlign = true;
     }
     applyCssTransform();
     updateStatusLabel();
@@ -232,7 +270,14 @@ export async function mountPdfReader({
         ev.preventDefault();
         const delta = ev.deltaY < 0 ? 0.15 : -0.15;
         setZoom(zoomScale + delta);
+        return;
       }
+      // Roda: rola a página se ela passa da tela; no limite (ou se cabe inteira) vira a página.
+      const horizontal = Math.abs(ev.deltaX) > Math.abs(ev.deltaY);
+      const px = normalizeWheelDelta({ deltaY: horizontal ? ev.deltaX : ev.deltaY, deltaMode: ev.deltaMode });
+      const moved = horizontal ? panBy(-px, 0) : panBy(0, -px);
+      if (moved) ev.preventDefault();
+      else if (!horizontal) hooks.onWheel?.(ev);
     },
     { passive: false },
   );
@@ -245,6 +290,7 @@ export async function mountPdfReader({
     currentPage = nextP;
     tx = 0;
     ty = 0;
+    pendingTopAlign = true;
     await renderCurrentPage(zoomScale);
     if (triggerSave) {
       debouncer.trigger(currentPage);
@@ -274,11 +320,16 @@ export async function mountPdfReader({
     zoomOut() {
       setZoom(zoomScale - 0.25);
     },
+    zoomReset() {
+      setZoom(1.0);
+    },
+    panBy,
     toggleFitMode() {
       fitMode = fitMode === 'page' ? 'width' : 'page';
       zoomScale = 1.0;
       tx = 0;
       ty = 0;
+      pendingTopAlign = true;
       renderCurrentPage(1.0);
       return fitMode;
     },
@@ -289,6 +340,7 @@ export async function mountPdfReader({
       currentPage = target;
       tx = 0;
       ty = 0;
+      pendingTopAlign = true;
       await renderCurrentPage(zoomScale);
     },
     getCurrentState() {

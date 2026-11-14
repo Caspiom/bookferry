@@ -15,6 +15,7 @@ import {
   formatPageLocator,
   initialPan,
   nextDoubleTapScale,
+  normalizeWheelDelta,
   panLimits,
   parsePageLocator,
   resolveSpreadMode,
@@ -121,6 +122,20 @@ export async function mountCbzReader({
     tx = p.tx;
     ty = p.ty;
     applyTransform();
+  }
+
+  /**
+   * Move a página (roda do mouse / setas). Devolve true se ela se mexeu; false quando já está no
+   * limite (ou cabe inteira na tela), e aí quem chamou vira a página.
+   */
+  function panBy(dx, dy) {
+    const before = { tx, ty };
+    tx += dx;
+    ty += dy;
+    clampPan();
+    if (tx === before.tx && ty === before.ty) return false;
+    applyTransform();
+    return true;
   }
 
   function updateStatusLabel() {
@@ -413,12 +428,14 @@ export async function mountCbzReader({
           x: ev.clientX - rect.left,
           y: ev.clientY - rect.top,
         });
-      } else if (overflowY()) {
-        ev.preventDefault();
-        ty -= ev.deltaY;
-        clampPan();
-        applyTransform();
+        return;
       }
+      // Roda: rola a página se ela passa da tela; no limite (ou se cabe inteira) vira a página.
+      const horizontal = Math.abs(ev.deltaX) > Math.abs(ev.deltaY);
+      const px = normalizeWheelDelta({ deltaY: horizontal ? ev.deltaX : ev.deltaY, deltaMode: ev.deltaMode });
+      const moved = horizontal ? panBy(-px, 0) : panBy(0, -px);
+      if (moved) ev.preventDefault();
+      else if (!horizontal) hooks.onWheel?.(ev);
     },
     { passive: false },
   );
@@ -469,6 +486,11 @@ export async function mountCbzReader({
     zoomOut() {
       setZoom(zoomScale - 0.25);
     },
+    zoomReset() {
+      resetView();
+      updateStatusLabel();
+    },
+    panBy,
     /** Alterna o encaixe (página -> largura -> altura) e devolve o modo novo. */
     toggleFitMode() {
       changePrefs({ fit: FIT_ORDER[(FIT_ORDER.indexOf(prefs.fit) + 1) % FIT_ORDER.length] });

@@ -4,6 +4,7 @@
 import { api } from './api.js';
 import {
   BUILTIN_PRESETS,
+  DEFAULT_READER_PREFS,
   EPUB_STYLE_FIELDS,
   applyPresetToPrefs,
   formatProgressLine,
@@ -315,6 +316,10 @@ export function mountAaPanel({ bookId, view: initialView, reader, onProgressPref
     /** Atalhos Ctrl+= / Ctrl+-: muda o tamanho da fonte em `delta` px (vale a faixa 12–36). */
     adjustFontSize(delta) {
       setPrefs({ ...prefs, font_size: prefs.font_size + delta });
+    },
+    /** Atalho 0: volta o tamanho da fonte ao padrão do app. */
+    resetFontSize() {
+      setPrefs({ ...prefs, font_size: DEFAULT_READER_PREFS.font_size });
     },
     /** Chama ao fechar o leitor: grava o que estiver pendente. */
     async flush() {

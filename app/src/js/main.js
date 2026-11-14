@@ -2,6 +2,7 @@
 
 import { api, listenClientEvents, setProtocolBaseUrl } from './api.js';
 import {
+  getCurrentFolder,
   navigateToFolder,
   prepareBookToOpen,
   renderLibraryView,
@@ -15,13 +16,17 @@ import { generateCoverIfMissing, generateMissingCovers, resizeImageToJpeg } from
 import { decodeQrFromImageData, grabFrame, scanQrFromCamera } from './qr-scanner.js';
 import { createReaderChrome } from './reader-chrome.js';
 import { createProgressBar, mountAaPanel, setReaderChromeTheme } from './reader-ui.js';
+import { mountShortcutsUi } from './shortcuts.js';
 import {
   bookDisplayTitle,
+  DEFAULT_READER_PREFS,
   cameraErrorMessage,
   formatBytes,
   formatPercent,
   isHiddenFromContinue,
+  parentFolderPath,
   parsePairingPayload,
+  resolveLibraryKeyAction,
   sanitizeProgressPrefs,
 } from './state.js';
 import {
@@ -47,6 +52,7 @@ const appState = {
   aaPanel: null,
   progressBar: null,
   chrome: null,
+  shortcuts: null,
 };
 
 function showScreen(screenId) {
@@ -256,6 +262,7 @@ export async function openBookFlow(book) {
       onProgress: (info) => bar?.update(info),
       onToggleChrome: () => chrome?.toggleImmersive(),
       onKey: (ev) => chrome?.handleKey(ev),
+      onWheel: (ev) => chrome?.handleWheel(ev),
       onDismissOverlays: () => appState.aaPanel?.close?.({ restoreFocus: false }),
     };
 
@@ -340,6 +347,47 @@ export async function closeActiveReader() {
   document.getElementById('toc-drawer')?.classList.add('hidden');
   showScreen('library-screen');
   await refreshLibrary(false);
+}
+
+/** Atalhos da biblioteca (desktop): só com a biblioteca à vista, sem janela aberta nem campo em foco. */
+function handleLibraryKey(ev) {
+  if (ev.defaultPrevented) return;
+  if (document.getElementById('library-screen')?.classList.contains('hidden')) return;
+  if (document.querySelector('.modal-backdrop:not(.hidden)')) return;
+  const tag = ev.target?.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || ev.target?.isContentEditable) {
+    return;
+  }
+  switch (resolveLibraryKeyAction(ev)) {
+    case 'search': {
+      ev.preventDefault();
+      const input = document.getElementById('library-search-input');
+      input?.focus();
+      input?.select();
+      break;
+    }
+    case 'refresh':
+      ev.preventDefault(); // F5/Ctrl+R recarregariam o app inteiro
+      document.getElementById('btn-refresh-library')?.click();
+      break;
+    case 'settings':
+      ev.preventDefault();
+      document.getElementById('btn-open-settings')?.click();
+      break;
+    case 'help':
+      ev.preventDefault();
+      appState.shortcuts?.openHelp();
+      break;
+    case 'up':
+      // Busca ativa mostra todas as pastas; só sobe quando há pasta aberta.
+      if (!appState.searchQuery && getCurrentFolder() !== '') {
+        ev.preventDefault();
+        navigateToFolder(parentFolderPath(getCurrentFolder()));
+      }
+      break;
+    default:
+      break;
+  }
 }
 
 function setupEventListeners() {
@@ -522,13 +570,25 @@ function setupEventListeners() {
   document.getElementById('btn-reader-next')?.addEventListener('click', () => {
     appState.activeReader?.next?.();
   });
+  appState.shortcuts = mountShortcutsUi({ getReader: () => appState.activeReader });
   appState.chrome = createReaderChrome({
     api,
     getReader: () => appState.activeReader,
     getAaPanel: () => appState.aaPanel,
     closeReader: () => closeActiveReader(),
     isDesktop: () => appState.status?.platform === 'desktop',
+    openHelp: () => appState.shortcuts?.openHelp(),
+    openGoto: () => appState.shortcuts?.openGoto(),
   });
+  // Roda do mouse nas margens do leitor (fora da página); o que a página já tratou chega com
+  // `defaultPrevented` e é ignorado.
+  document.getElementById('reader-viewport')?.addEventListener(
+    'wheel',
+    (ev) => {
+      if (appState.activeReader) appState.chrome?.handleWheel(ev);
+    },
+    { passive: false },
+  );
   document.getElementById('btn-reader-fullscreen')?.addEventListener('click', () => {
     appState.chrome.toggleFullscreen();
   });
@@ -566,8 +626,15 @@ function setupEventListeners() {
 
   // Atalhos de teclado no leitor
   window.addEventListener('keydown', (ev) => {
-    if (!appState.activeReader) return;
+    if (appState.shortcuts?.handleKey(ev)) return; // ajuda ou "Ir para" aberta
+    if (!appState.activeReader) {
+      handleLibraryKey(ev);
+      return;
+    }
     appState.chrome?.handleKey(ev);
+  });
+  document.getElementById('library-search-input')?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') ev.target.blur();
   });
 
 
@@ -851,6 +918,62 @@ async function runE2eAutomation() {
       throw new Error(`Navegacao por pastas falhou: ${JSON.stringify(results.steps.folder_navigation)}`);
     }
     results.screenshots.push(await api.e2eCaptureScreenshot('09-folder-nav'));
+    // Atalhos da biblioteca (estamos em Quadrinhos/DC): subir pasta, buscar, atualizar, ajustes, ajuda.
+    {
+      const L = {};
+      const press = (k, extra = {}, target = window) => {
+        const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...extra });
+        target.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      };
+      const si = document.getElementById('library-search-input');
+      const helpEl = document.getElementById('shortcuts-modal');
+      press('Backspace');
+      await sleep(250);
+      L.after_backspace = getCurrentFolder();
+      press('ArrowLeft', { altKey: true });
+      await sleep(250);
+      L.after_alt_left = getCurrentFolder();
+      L.backspace_at_root_ignored = press('Backspace') === false;
+      L.slash_consumed = press('/');
+      L.slash_focuses_search = document.activeElement === si;
+      press('?', {}, si); // digitando no campo: "?" é texto, não abre a ajuda
+      L.help_closed_while_typing = helpEl.classList.contains('hidden');
+      si.blur();
+      L.f5_prevented = press('F5'); // sem preventDefault o webview recarregaria o app inteiro
+      await sleep(500);
+      press(',', { ctrlKey: true });
+      await sleep(700);
+      L.settings_opened = !document.getElementById('settings-modal').classList.contains('hidden');
+      L.backspace_ignored_under_modal = press('Backspace') === false;
+      document.getElementById('btn-close-settings')?.click();
+      await sleep(300);
+      press('?');
+      await sleep(300);
+      L.help_opened = !helpEl.classList.contains('hidden');
+      results.screenshots.push(await api.e2eCaptureScreenshot('15-shortcuts-help'));
+      press('Escape');
+      await sleep(300);
+      L.help_closed = helpEl.classList.contains('hidden');
+      navigateToFolder('Quadrinhos/DC');
+      await sleep(300);
+      results.steps.library_shortcuts = L;
+      const want = {
+        after_backspace: 'Quadrinhos',
+        after_alt_left: '',
+        backspace_at_root_ignored: true,
+        slash_consumed: true,
+        slash_focuses_search: true,
+        help_closed_while_typing: true,
+        f5_prevented: true,
+        settings_opened: true,
+        backspace_ignored_under_modal: true,
+        help_opened: true,
+        help_closed: true,
+      };
+      const bad = Object.entries(want).filter(([name, v]) => L[name] !== v);
+      if (bad.length) throw new Error(`Atalhos da biblioteca: ${JSON.stringify(bad)} | ${JSON.stringify(L)}`);
+    }
     // Logo: de dentro de uma pasta e com busca ativa, volta ao início (raiz, busca limpa).
     {
       const si = document.getElementById('library-search-input');
@@ -1040,6 +1163,67 @@ async function runE2eAutomation() {
       key(' ', { shiftKey: true });
       await sleep(1500);
 
+      // Roda do mouse, zoom (= tamanho da fonte) e "Ir para %" no EPUB.
+      {
+        const e = {};
+        const doc = reader().getContentDoc();
+        const wheelBook = (deltaY, extra = {}) =>
+          doc.dispatchEvent(
+            new doc.defaultView.WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true, ...extra }),
+          );
+        const loc = () => reader().getCurrentState().locator;
+        const size = () => appState.aaPanel?.getPrefs().font_size;
+        const l0 = loc();
+        wheelBook(100);
+        await sleep(1500);
+        const l1 = loc();
+        e.wheel_down_turned = l1 !== l0;
+        wheelBook(-100);
+        await sleep(1500);
+        e.wheel_up_turned = loc() !== l1;
+
+        const s0 = size();
+        key('+');
+        await sleep(1200);
+        e.font_after_plus = size() - s0;
+        wheelBook(-100, { ctrlKey: true }); // Ctrl+roda para cima amplia
+        await sleep(1200);
+        e.font_after_ctrl_wheel = size() - s0;
+        key('0');
+        await sleep(1200);
+        e.font_after_zero = size();
+        e.font_default = DEFAULT_READER_PREFS.font_size;
+        if (s0 !== e.font_default) appState.aaPanel.adjustFontSize(s0 - e.font_default);
+        await sleep(1200);
+
+        key('g');
+        await sleep(300);
+        const gotoModal = document.getElementById('goto-modal');
+        e.goto_opened = !gotoModal.classList.contains('hidden');
+        e.goto_title = document.getElementById('goto-title').textContent;
+        document.getElementById('goto-input').value = '60';
+        document.getElementById('goto-form').requestSubmit();
+        await sleep(1800);
+        e.goto_closed = gotoModal.classList.contains('hidden');
+        e.goto_percent = Math.round(reader().getCurrentState().percent);
+        results.steps.epub_shortcuts = e;
+        const want = {
+          wheel_down_turned: true,
+          wheel_up_turned: true,
+          font_after_plus: 2,
+          font_after_ctrl_wheel: 4,
+          font_after_zero: e.font_default,
+          goto_opened: true,
+          goto_title: 'Ir para o percentual',
+          goto_closed: true,
+        };
+        const bad = Object.entries(want).filter(([name, v]) => e[name] !== v);
+        if (bad.length || e.goto_percent < 40 || e.goto_percent > 80) {
+          throw new Error(`EPUB atalhos/roda: ${JSON.stringify(bad)} | ${JSON.stringify(e)}`);
+        }
+        await sleep(600);
+      }
+
       // Tela cheia: F11 liga, Esc desliga (sob xvfb sem gerenciador de janelas pode não efetivar).
       key('F11');
       await sleep(600);
@@ -1153,6 +1337,98 @@ async function runE2eAutomation() {
       if (!t.immersive_after_center || t.immersive_after_second) throw new Error(`CBZ imersivo: ${JSON.stringify(t)}`);
       if (t.after_right_tap !== 'Pág. 3 / 6' || t.after_left_tap !== 'Pág. 2 / 6') {
         throw new Error(`CBZ zonas de toque: ${JSON.stringify(t)}`);
+      }
+    }
+
+    // Atalhos de teclado e roda do mouse nos quadrinhos (estamos na pág. 2 de 6, LTR, sem zoom).
+    {
+      const reader = appState.activeReader;
+      const stage = document.querySelector('.cbz-stage');
+      const label = document.getElementById('reader-status-label');
+      const target = () => document.querySelector('.cbz-target');
+      const key = (k, extra = {}) =>
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...extra }));
+      const wheel = (deltaY, extra = {}) =>
+        stage.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true, ...extra }));
+      const page = () => label.textContent.match(/\d+ \/ \d+/)?.[0];
+      const tf = () => {
+        const s = target().style.transform;
+        return { y: parseFloat(s.match(/translate3d\([^,]+,\s*(-?[\d.]+)px/)?.[1]), scale: parseFloat(s.match(/scale\(([\d.]+)\)/)?.[1]) };
+      };
+      const k = {};
+      wheel(100);
+      await sleep(700);
+      k.wheel_down = page();
+      wheel(-100);
+      await sleep(700);
+      k.wheel_up = page();
+      key('ArrowRight');
+      await sleep(700);
+      k.arrow_right_ltr = page();
+      key('ArrowLeft');
+      await sleep(700);
+      k.arrow_left_ltr = page();
+      reader.toggleDirection(); // mangá: ← avança, → volta
+      await sleep(500);
+      key('ArrowRight');
+      await sleep(700);
+      k.arrow_right_rtl = page();
+      key('ArrowLeft');
+      await sleep(700);
+      k.arrow_left_rtl = page();
+      reader.toggleDirection();
+      await sleep(500);
+      key('End');
+      await sleep(700);
+      k.end = page();
+      key('Home');
+      await sleep(700);
+      k.home = page();
+      key('g');
+      await sleep(300);
+      document.getElementById('goto-input').value = '4';
+      document.getElementById('goto-form').requestSubmit();
+      await sleep(800);
+      k.goto = page();
+      await reader.seekPage(2);
+      await sleep(800);
+      for (let i = 0; i < 4; i += 1) key('+'); // 1,25 -> 2,0
+      await sleep(400);
+      k.zoom_scale = tf().scale;
+      const y0 = tf().y;
+      key('ArrowDown');
+      await sleep(300);
+      const y1 = tf().y;
+      k.arrow_pans_when_zoomed = y1 < y0 && page() === '2 / 6';
+      wheel(60);
+      await sleep(300);
+      k.wheel_pans_when_zoomed = tf().y < y1 && page() === '2 / 6';
+      wheel(-120, { ctrlKey: true }); // Ctrl+roda para cima amplia
+      await sleep(300);
+      k.ctrl_wheel_zoomed_more = tf().scale > k.zoom_scale;
+      key('0');
+      await sleep(400);
+      k.zoom_reset = tf().scale;
+      results.steps.cbz_shortcuts = k;
+      const want = {
+        wheel_down: '3 / 6',
+        wheel_up: '2 / 6',
+        arrow_right_ltr: '3 / 6',
+        arrow_left_ltr: '2 / 6',
+        arrow_right_rtl: '1 / 6',
+        arrow_left_rtl: '2 / 6',
+        end: '6 / 6',
+        home: '1 / 6',
+        goto: '4 / 6',
+        zoom_scale: 2,
+        arrow_pans_when_zoomed: true,
+        wheel_pans_when_zoomed: true,
+        ctrl_wheel_zoomed_more: true,
+        zoom_reset: 1,
+      };
+      const bad = Object.entries(want).filter(([name, v]) => k[name] !== v);
+      if (bad.length || reader.getPrefs().direction !== 'ltr') {
+        throw new Error(`CBZ atalhos/roda: ${JSON.stringify(bad)} | ${JSON.stringify(k)}`);
       }
     }
 
@@ -1487,6 +1763,110 @@ async function runE2eAutomation() {
       if (t.start !== 'Pág. 4 / 5' || t.after_right_tap !== 'Pág. 5 / 5' || t.after_left_tap !== 'Pág. 4 / 5') {
         throw new Error(`PDF zonas de toque: ${JSON.stringify(t)}`);
       }
+    }
+
+    // Atalhos de teclado e roda do mouse no PDF (estamos na pág. 4 de 5, sem zoom).
+    {
+      const stage = document.querySelector('.zoom-stage');
+      const canvas = document.querySelector('.pdf-canvas');
+      const wrap = document.querySelector('.zoom-target');
+      const label = document.getElementById('reader-status-label');
+      const key = (k, extra = {}) =>
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...extra }));
+      const wheel = (deltaY, extra = {}) =>
+        stage.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true, ...extra }));
+      const page = () => label.textContent.match(/\d+ \/ \d+/)?.[0];
+      const canvasW = () => parseFloat(canvas.style.width);
+      const ty = () => new DOMMatrixReadOnly(getComputedStyle(wrap).transform).m42;
+      const k = {};
+
+      wheel(100);
+      await sleep(1200);
+      k.wheel_down_page = page();
+      wheel(100); // já é a última: não pode passar do fim
+      await sleep(500);
+      k.wheel_down_at_end = page();
+      wheel(-100);
+      await sleep(1200);
+      k.wheel_up_page = page();
+      key('Home');
+      await sleep(1200);
+      k.home = page();
+      key('End');
+      await sleep(1200);
+      k.end = page();
+      key('ArrowUp');
+      await sleep(1200);
+      k.arrow_up_page = page(); // sem zoom a seta vira a página
+
+      const w0 = canvasW();
+      key('+');
+      await sleep(900);
+      k.zoom_in_grew = canvasW() > w0 * 1.15;
+      const p0 = page();
+      const y0 = ty();
+      key('ArrowDown'); // ampliado: a seta move a página, não vira
+      await sleep(300);
+      k.arrow_pans_when_zoomed = ty() < y0 && page() === p0;
+      const y1 = ty();
+      await sleep(300);
+      wheel(60); // ampliado: a roda rola a página
+      await sleep(300);
+      k.wheel_pans_when_zoomed = ty() < y1 && page() === p0;
+      key('-');
+      await sleep(900);
+      wheel(120, { ctrlKey: true }); // Ctrl+roda para baixo reduz
+      await sleep(900);
+      key('0');
+      await sleep(900);
+      k.zoom_reset_width = Math.abs(canvasW() - w0) < 2;
+
+      key('g');
+      await sleep(300);
+      const gotoModal = document.getElementById('goto-modal');
+      k.goto_opened = !gotoModal.classList.contains('hidden');
+      document.getElementById('goto-input').value = '2';
+      document.getElementById('goto-form').requestSubmit();
+      await sleep(1200);
+      k.goto_closed = gotoModal.classList.contains('hidden');
+      k.goto_page = page();
+
+      key('?');
+      await sleep(300);
+      const help = document.getElementById('shortcuts-modal');
+      k.help_opened = !help.classList.contains('hidden');
+      k.help_has_rows = document.querySelectorAll('#shortcuts-body .shortcuts-row').length >= 15;
+      key('ArrowRight'); // com a ajuda aberta o livro não pode virar
+      await sleep(500);
+      k.page_unchanged_under_help = page() === k.goto_page;
+      key('Escape');
+      await sleep(300);
+      k.help_closed_by_esc = help.classList.contains('hidden');
+      k.reader_still_open = Boolean(appState.activeReader);
+
+      results.steps.pdf_shortcuts = k;
+      const expect = {
+        wheel_down_page: '5 / 5',
+        wheel_down_at_end: '5 / 5',
+        wheel_up_page: '4 / 5',
+        home: '1 / 5',
+        end: '5 / 5',
+        arrow_up_page: '4 / 5',
+        zoom_in_grew: true,
+        arrow_pans_when_zoomed: true,
+        wheel_pans_when_zoomed: true,
+        zoom_reset_width: true,
+        goto_opened: true,
+        goto_closed: true,
+        goto_page: '2 / 5',
+        help_opened: true,
+        help_has_rows: true,
+        page_unchanged_under_help: true,
+        help_closed_by_esc: true,
+        reader_still_open: true,
+      };
+      const bad = Object.entries(expect).filter(([name, want]) => k[name] !== want);
+      if (bad.length) throw new Error(`PDF atalhos/roda: ${JSON.stringify(bad)} | ${JSON.stringify(k)}`);
     }
 
     await closeActiveReader();
