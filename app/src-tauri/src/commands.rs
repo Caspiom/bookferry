@@ -40,7 +40,7 @@ const SETTINGS_FILENAME: &str = "settings.json";
 pub struct AppSettings {
     /// Tamanho de fonte padrao do leitor EPUB em pixels (12..=36).
     pub default_font_size: u32,
-    /// Preferencia de tema (`"auto"`, `"light"`, `"dark"`, `"sepia"`).
+    /// Preferencia de tema (`"auto"`, `"light"`, `"dark"`, `"sepia"`, `"black"`).
     pub theme: String,
     /// Caminho da pasta de livros (vault_dir) no Desktop.
     pub vault_dir: Option<String>,
@@ -898,7 +898,7 @@ pub async fn save_settings(
         }
         if let Some(th) = theme {
             let clean = th.trim().to_ascii_lowercase();
-            if matches!(clean.as_str(), "auto" | "light" | "dark" | "sepia") {
+            if matches!(clean.as_str(), "auto" | "light" | "dark" | "sepia" | "black") {
                 settings.theme = clean;
             }
         }

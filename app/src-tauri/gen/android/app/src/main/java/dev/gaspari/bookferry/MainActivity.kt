@@ -2,6 +2,7 @@ package dev.gaspari.bookferry
 
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
@@ -29,7 +30,7 @@ class MainActivity : TauriActivity() {
     webViewRef = WeakReference(webView)
     // Segurança: o WebView só carrega conteúdo do próprio app (assets/protocolo
     // bookferry com CSP restritiva), nunca páginas de terceiros; por isso é
-    // aceitável expor esta ponte JavascriptInterface (API mínima: 2 métodos).
+    // aceitável expor esta ponte JavascriptInterface (API mínima: 3 métodos).
     webView.addJavascriptInterface(BookferryNativeBridge(), "BookferryNative")
   }
 
@@ -81,6 +82,19 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun setImmersive(enabled: Boolean) {
       runOnUiThread { applyImmersive(enabled) }
+    }
+
+    // Leitor aberto = tela não apaga nem bloqueia por inatividade. É um flag da janela:
+    // dispensa permissão e o sistema o ignora sozinho quando o app sai de cena.
+    @JavascriptInterface
+    fun setKeepScreenOn(enabled: Boolean) {
+      runOnUiThread {
+        if (enabled) {
+          window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+          window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+      }
     }
   }
 }

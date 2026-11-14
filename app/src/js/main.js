@@ -974,6 +974,50 @@ async function runE2eAutomation() {
       const bad = Object.entries(want).filter(([name, v]) => L[name] !== v);
       if (bad.length) throw new Error(`Atalhos da biblioteca: ${JSON.stringify(bad)} | ${JSON.stringify(L)}`);
     }
+
+    // Tema "Breu" (preto): salva pelos Ajustes, confere que o Rust persistiu e que fundo e logo
+    // seguem a variante preta da marca (#000 e tudo em branco). Depois volta ao automático.
+    {
+      const T = {};
+      const saveTheme = async (value) => {
+        document.getElementById('btn-open-settings')?.click();
+        await sleep(500);
+        document.getElementById('settings-theme-select').value = value;
+        document.getElementById('btn-save-preferences').click();
+        await sleep(900);
+      };
+      await saveTheme('black');
+      const cs = getComputedStyle(document.documentElement);
+      T.data_theme = document.documentElement.getAttribute('data-theme');
+      T.persisted = appState.status?.settings?.theme;
+      T.select_kept = document.getElementById('settings-theme-select').value;
+      T.body_bg = getComputedStyle(document.body).backgroundColor;
+      T.logo_vars = ['--logo-page', '--logo-page-2', '--logo-ember', '--logo-sea']
+        .map((v) => cs.getPropertyValue(v).trim())
+        .join(',');
+      T.aa_label = document.querySelector('.aa-theme[data-theme="black"]')?.textContent.trim();
+      T.toast_bg = getComputedStyle(document.querySelector('.toast-item') || document.body).backgroundColor;
+      document.getElementById('btn-close-settings')?.click();
+      await sleep(400);
+      results.screenshots.push(await api.e2eCaptureScreenshot('16-tema-breu'));
+      await saveTheme('auto');
+      T.reverted = document.documentElement.getAttribute('data-theme');
+      document.getElementById('btn-close-settings')?.click();
+      await sleep(300);
+      results.steps.theme_breu = T;
+      const want = {
+        data_theme: 'black',
+        persisted: 'black',
+        select_kept: 'black',
+        body_bg: 'rgb(0, 0, 0)',
+        logo_vars: '#ffffff,#ffffff,#ffffff,#ffffff',
+        aa_label: 'AaBreu',
+        toast_bg: 'rgb(20, 20, 22)',
+        reverted: null,
+      };
+      const bad = Object.entries(want).filter(([name, v]) => T[name] !== v);
+      if (bad.length) throw new Error(`Tema Breu: ${JSON.stringify(bad)} | ${JSON.stringify(T)}`);
+    }
     // Logo: de dentro de uma pasta e com busca ativa, volta ao início (raiz, busca limpa).
     {
       const si = document.getElementById('library-search-input');

@@ -229,7 +229,7 @@ export const downloadModal = {
 };
 
 /**
- * Aplica o tema escolhido ('auto', 'light', 'dark', 'sepia') no documento.
+ * Aplica o tema escolhido ('auto', 'light', 'dark', 'sepia', 'black') no documento.
  * @param {string} theme
  */
 export function applyTheme(theme) {

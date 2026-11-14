@@ -84,7 +84,7 @@
 
 /* Tema escuro "noite": tinta clara sobre azul quase preto, brasa mais luminosa. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']):not([data-theme='sepia']) {
+  :root:not([data-theme='light']):not([data-theme='sepia']):not([data-theme='black']) {
     color-scheme: dark;
     --bg: #12161c;
     --surface: #191e26;
@@ -153,6 +153,45 @@
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6);
   --shadow-book: 0 1px 1px rgba(0, 0, 0, 0.3), 0 6px 14px rgba(0, 0, 0, 0.4),
     0 16px 30px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* Tema "Breu": preto de verdade (OLED). Segue a variante preta da marca: fundo #000 e
+ * símbolo + nome só em branco. Brasa e Mar ficam só nos estados (progresso, conectado). */
+:root[data-theme='black'] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #0a0a0b;
+  --surface-2: #141416;
+  --surface-3: #1d1d20;
+  --ink: #f2efe8;
+  --ink-2: #a6a198;
+  --ink-3: #8a867e;
+  --line: #2a2a2f;
+  --line-strong: #404047;
+  --brand: #ffffff;
+  --brand-hover: #e6e6e6;
+  --on-brand: #000000;
+  --accent: #f0a06a;
+  --accent-fill: #ea8a4c;
+  --accent-soft: #2a1d14;
+  --sea: #7cc4bd;
+  --sea-soft: #10201f;
+  --danger: #f08a78;
+  --danger-soft: #2a1614;
+  --warn: #e8b766;
+  --warn-soft: #271f10;
+  --focus: #f0a06a;
+  --logo-page: #ffffff;
+  --logo-page-2: #ffffff;
+  --logo-ember: #ffffff;
+  --logo-sea: #ffffff;
+  --reader-bg: #000000;
+  --scrim: rgba(0, 0, 0, 0.78);
+  /* Sombra some no preto: o contorno fino separa as camadas. */
+  --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 22px rgba(0, 0, 0, 0.8);
+  --shadow-lg: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 24px 64px rgba(0, 0, 0, 0.9);
+  --shadow-book: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 6px 14px rgba(0, 0, 0, 0.8);
 }
 
 :root[data-theme='sepia'] {
@@ -2417,6 +2456,11 @@ code {
 .toast-actions {
   display: flex;
   gap: 6px;
+}
+
+/* O aviso era azul-ardósia fixo; no Breu fica neutro, com contorno. */
+:root[data-theme='black'] .toast-item {
+  background-color: #141416;
 }
 
 .toast-item .btn-primary {

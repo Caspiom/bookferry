@@ -1,5 +1,6 @@
 // Testes unitários automatizados da lógica pura do frontend (executados com `node --test`).
 
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
@@ -344,6 +345,8 @@ describe('Tema efetivo', () => {
   it('tema do livro vence; auto segue o app; senão o sistema', () => {
     assert.equal(resolveEffectiveTheme('black', 'light', false), 'black');
     assert.equal(resolveEffectiveTheme('auto', 'sepia', true), 'sepia');
+    assert.equal(resolveEffectiveTheme('auto', 'black', false), 'black'); // Breu fixo no app
+    assert.equal(resolveEffectiveTheme('auto', 'black', true), 'black');
     assert.equal(resolveEffectiveTheme('auto', 'auto', true), 'dark');
     assert.equal(resolveEffectiveTheme('auto', 'auto', false), 'light');
     assert.equal(resolveEffectiveTheme('xyz', 'abc', false), 'light');
@@ -902,5 +905,23 @@ describe('cameraErrorMessage', () => {
     assert.match(none, /Nenhuma câmera/);
     assert.match(busy, /em uso/);
     assert.equal(new Set([denied, none, busy, cameraErrorMessage(null)]).size, 4);
+  });
+});
+
+describe('Tema Breu (preto) no CSS', () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+
+  it('o bloco automático (prefers-color-scheme) não pode sobrescrever o Breu', () => {
+    // O seletor do bloco automático soma mais especificidade que `[data-theme]`: sem o :not do
+    // Breu, num sistema escuro o preto viraria o azul-noite do tema Escuro.
+    assert.match(css, /:root:not\(\[data-theme='light'\]\):not\(\[data-theme='sepia'\]\):not\(\[data-theme='black'\]\)/);
+  });
+
+  it('Breu é #000 com o logo todo em branco (variante preta da marca)', () => {
+    const block = css.match(/:root\[data-theme='black'\] \{[^}]*\}/)?.[0] ?? '';
+    assert.match(block, /--bg: #000000;/);
+    for (const v of ['--logo-page', '--logo-page-2', '--logo-ember', '--logo-sea']) {
+      assert.match(block, new RegExp(`${v}: #ffffff;`));
+    }
   });
 });

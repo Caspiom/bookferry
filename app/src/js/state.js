@@ -622,7 +622,7 @@ export const READER_THEME_COLORS = Object.freeze({
  * Resolve o tema efetivo (`light|sepia|dark|black`) do leitor.
  * `auto` segue o tema do app (se fixo) ou o esquema de cores do sistema.
  * @param {string} readerTheme
- * @param {string} appTheme `auto|light|dark|sepia` (Ajustes)
+ * @param {string} appTheme `auto|light|dark|sepia|black` (Ajustes)
  * @param {boolean} prefersDark
  */
 export function resolveEffectiveTheme(readerTheme, appTheme = 'auto', prefersDark = false) {
