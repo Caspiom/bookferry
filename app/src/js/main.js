@@ -354,6 +354,20 @@ function setupEventListeners() {
     );
   });
 
+  // Logo: volta ao início da biblioteca (raiz, sem busca, no topo)
+  document.getElementById('btn-home')?.addEventListener('click', () => {
+    appState.searchQuery = '';
+    if (searchInput) searchInput.value = '';
+    navigateToFolder('');
+    renderLibraryView(
+      appState.books,
+      appState.searchQuery,
+      (book) => openBookFlow(book),
+      (book) => removeBookDownloadFlow(book),
+    );
+    document.getElementById('library-scroll-area')?.scrollTo?.({ top: 0 });
+  });
+
   // Botão Atualizar (e reescanear no desktop se servidor local estiver ativo)
   const refreshBtn = document.getElementById('btn-refresh-library');
   refreshBtn?.addEventListener('click', async () => {
@@ -780,7 +794,24 @@ async function runE2eAutomation() {
       throw new Error(`Navegacao por pastas falhou: ${JSON.stringify(results.steps.folder_navigation)}`);
     }
     results.screenshots.push(await api.e2eCaptureScreenshot('09-folder-nav'));
-    document.querySelector('#folder-breadcrumb button.crumb')?.click(); // "Biblioteca" (raiz)
+    // Logo: de dentro de uma pasta e com busca ativa, volta ao início (raiz, busca limpa).
+    {
+      const si = document.getElementById('library-search-input');
+      si.value = 'zzz-nao-existe';
+      si.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(150);
+      document.getElementById('btn-home')?.click();
+      await sleep(250);
+      const home = {
+        search: si.value,
+        crumbs: document.querySelectorAll('#folder-breadcrumb button.crumb').length,
+        root_folders: document.querySelectorAll('#folder-grid .folder-card').length,
+      };
+      results.steps.logo_home = home;
+      if (home.search !== '' || home.root_folders < 1 || (document.getElementById('folder-breadcrumb')?.textContent || '').includes('Quadrinhos')) {
+        throw new Error(`Logo nao voltou ao inicio: ${JSON.stringify(home)}`);
+      }
+    }
     await sleep(200);
 
     // 1. Fluxo EPUB: abrir, virar página, aguardar debounce + SSE no celular, testar toast remoto
