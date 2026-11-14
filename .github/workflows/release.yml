@@ -75,6 +75,21 @@ jobs:
           mkdir dist
           cp target/release/bundle/nsis/*.exe dist/
           ls -la dist
+      - name: Teste de fumaca (instalar em silencio e abrir)
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem dist/*.exe).FullName
+          Start-Process -FilePath $exe -ArgumentList '/S' -Wait
+          $app = Join-Path $env:LOCALAPPDATA 'Bookferry\bookferry.exe'
+          if (-not (Test-Path $app)) {
+            Get-ChildItem $env:LOCALAPPDATA -Recurse -Filter bookferry.exe -ErrorAction SilentlyContinue | Select-Object -First 3 FullName
+            throw "bookferry.exe nao foi instalado em $app"
+          }
+          $p = Start-Process $app -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "O app fechou sozinho (codigo $($p.ExitCode))" }
+          Write-Host "App aberto e vivo apos 15 s"
+          Stop-Process $p -Force
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -82,6 +97,8 @@ jobs:
 
   macos:
     needs: versao
+    # Em push de branch (validacao) o macOS fica de fora: e o runner mais caro. Roda em tag e manualmente.
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/ci/instaladores' # TEMPORARIO
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -105,6 +122,18 @@ jobs:
           mkdir dist
           cp target/${{ matrix.alvo }}/release/bundle/dmg/*.dmg dist/
           ls -la dist
+      - name: Teste de fumaca (abrir o app do .dmg)
+        if: matrix.alvo == 'aarch64-apple-darwin'
+        run: |
+          hdiutil attach dist/*.dmg -mountpoint /Volumes/bf -nobrowse
+          cp -R /Volumes/bf/Bookferry.app /Applications/
+          hdiutil detach /Volumes/bf
+          codesign -dv --verbose=2 /Applications/Bookferry.app 2>&1 | grep -E "Identifier|Signature|flags" || true
+          /Applications/Bookferry.app/Contents/MacOS/bookferry &
+          pid=$!
+          sleep 15
+          kill -0 $pid && echo "App aberto e vivo apos 15 s"
+          kill $pid
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.alvo }}
