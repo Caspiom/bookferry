@@ -708,6 +708,30 @@ async function runE2eAutomation() {
     results.steps.second_client_paired = peerInfo;
     await sleep(400);
 
+    // Sanidade de layout: pega CSS/webview quebrado (texto minúsculo, sem padding, cards
+    // colapsados) que nenhum teste de lógica percebe. Valores bem abaixo do normal de propósito.
+    {
+      const topbar = document.querySelector('#library-screen .topbar');
+      const folderCard = document.querySelector('#folder-grid .folder-card');
+      const searchBox = document.querySelector('#library-screen input[type="search"], #library-screen input[type="text"]');
+      const layout = {
+        body_font_px: parseFloat(getComputedStyle(document.body).fontSize),
+        topbar_pad_left_px: topbar ? parseFloat(getComputedStyle(topbar).paddingLeft) : 0,
+        folder_card_w: folderCard ? Math.round(folderCard.getBoundingClientRect().width) : 0,
+        folder_card_h: folderCard ? Math.round(folderCard.getBoundingClientRect().height) : 0,
+        search_w: searchBox ? Math.round(searchBox.getBoundingClientRect().width) : 0,
+        viewport_w: window.innerWidth,
+        dpr: window.devicePixelRatio,
+      };
+      results.steps.layout_sanity = layout;
+      const bad = [];
+      if (!(layout.body_font_px >= 12)) bad.push('fonte do corpo < 12px');
+      if (!(layout.topbar_pad_left_px >= 8)) bad.push('barra superior sem padding');
+      if (!(layout.folder_card_w >= 100 && layout.folder_card_h >= 40)) bad.push('card de pasta colapsado');
+      if (!(layout.search_w >= 120)) bad.push('campo de busca colapsado');
+      if (bad.length) throw new Error(`Layout quebrado: ${bad.join('; ')} :: ${JSON.stringify(layout)}`);
+    }
+
     // Screenshot 1: Biblioteca inicial com os 3 formatos
     results.screenshots.push(await api.e2eCaptureScreenshot('01-library'));
 
