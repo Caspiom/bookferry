@@ -1,0 +1,1931 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bookferry</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<meta name="description" content="Leitor de livros e quadrinhos que usa o seu PC como servidor. Feche no computador e abra no celular na mesma página, pela rede da sua casa, sem conta e sem nuvem de terceiros." />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#1B2A3A" />
+<meta property="og:title" content="Bookferry" />
+<meta property="og:description" content="Feche o livro no computador. Abra no celular na mesma página." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="img/favicon.ico" sizes="any" />
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+<link rel="manifest" href="img/site.webmanifest" />
+<script>
+  /* Evita piscar o português antes de trocar para inglês (mesma regra do script principal). */
+  (function () {
+    var l = null;
+    try { l = new URLSearchParams(location.search).get('lang') || localStorage.getItem('bookferry-lang'); } catch (e) {}
+    if (!l) l = String((navigator.languages && navigator.languages[0]) || navigator.language || 'pt').toLowerCase().indexOf('pt') === 0 ? 'pt' : 'en';
+    if (l === 'en') {
+      var d = document.documentElement;
+      d.lang = 'en';
+      d.classList.add('lang-wait');
+      setTimeout(function () { d.classList.remove('lang-wait'); }, 1500);
+    }
+  })();
+</script>
+<style>
+/* Bookferry — landing.
+ * Mesma linguagem do app ("papel e tinta"): faixa de Tinta no topo com a demonstração da
+ * balsa entre PC e celular, o resto em papel. Literata nos títulos e no texto de leitura,
+ * fonte do sistema na interface, mono para dados (página, CFI, caminhos).
+ * Layout: coluna de 1180px alinhada à esquerda; a demo é o único momento ruidoso da página.
+ */
+
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url('fonts/literata-latin.woff2') format('woff2-variations'), url('fonts/literata-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 900;
+  src: url('fonts/literata-latin-ext.woff2') format('woff2-variations'), url('fonts/literata-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+A720-A7FF;
+}
+
+:root {
+  color-scheme: light;
+  --font-serif: 'Literata', Georgia, 'Noto Serif', 'DejaVu Serif', serif;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+
+  /* Papel (página) */
+  --bg: #f6f2ea;
+  --surface: #fffdf8;
+  --surface-2: #efe9dd;
+  --surface-3: #e6dfd0;
+  --ink: #1e242d;
+  --ink-2: #5f5849;
+  --ink-3: #8a8171;
+  --line: #e4dbcc;
+  --line-strong: #d3c8b5;
+
+  /* Marca */
+  --brasa: #b9561f;        /* texto sobre papel (AA) */
+  --brasa-fill: #e07b3c;   /* barras, preenchimentos */
+  --brasa-soft: #f7e3d3;
+  --mar: #2e7b77;
+  --mar-soft: #dcefeb;
+  --warn: #9a6512;
+  --warn-soft: #f6ead0;
+  --logo-page: #1b2a3a;
+  --logo-page-2: #31465d;
+  --logo-ember: #e8874a;
+  --logo-sea: #5fa7a3;
+
+  /* Faixa de Tinta: igual nos dois temas */
+  --tinta: #1b2a3a;
+  --tinta-deep: #132130;
+  --on-tinta: #f4ecdd;
+  --on-tinta-2: #aeb8c1;
+  --on-tinta-line: #34485d;
+  --sea-on-tinta: #5fa7a3;
+  --ember-on-tinta: #f0a06a;
+
+  /* Superfície das telas dentro da demo */
+  --sheet: #fffdf8;
+  --sheet-2: #f3eee4;
+  --sheet-ink: #2a2620;
+  --device: #0e1822;
+
+  --shadow-book: 0 1px 1px rgba(30, 22, 10, 0.1), 0 4px 10px rgba(30, 22, 10, 0.14), 0 14px 28px -10px rgba(30, 22, 10, 0.3);
+  --shadow-device: 0 30px 60px -20px rgba(0, 0, 0, 0.55), 0 8px 18px rgba(0, 0, 0, 0.25);
+
+  --wrap: 1180px;
+  --gutter-l: max(20px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(20px, env(safe-area-inset-right, 0px));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #12161c;
+    --surface: #191e26;
+    --surface-2: #222833;
+    --surface-3: #2b323e;
+    --ink: #ece6da;
+    --ink-2: #b0a899;
+    --ink-3: #847c70;
+    --line: #29303b;
+    --line-strong: #39414e;
+    --brasa: #f0a06a;
+    --brasa-fill: #ea8a4c;
+    --brasa-soft: #3a2a20;
+    --mar: #7cc4bd;
+    --mar-soft: #1c3533;
+    --warn: #e8b766;
+    --warn-soft: #362c18;
+    --logo-page: #f4ecdd;
+    --logo-page-2: #e2d5be;
+    --sheet: #191e26;
+    --sheet-2: #222833;
+    --sheet-ink: #e4ddd0;
+    --device: #05090d;
+    --shadow-book: 0 1px 1px rgba(0, 0, 0, 0.3), 0 6px 14px rgba(0, 0, 0, 0.4), 0 16px 30px -12px rgba(0, 0, 0, 0.6);
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #12161c;
+  --surface: #191e26;
+  --surface-2: #222833;
+  --surface-3: #2b323e;
+  --ink: #ece6da;
+  --ink-2: #b0a899;
+  --ink-3: #847c70;
+  --line: #29303b;
+  --line-strong: #39414e;
+  --brasa: #f0a06a;
+  --brasa-fill: #ea8a4c;
+  --brasa-soft: #3a2a20;
+  --mar: #7cc4bd;
+  --mar-soft: #1c3533;
+  --warn: #e8b766;
+  --warn-soft: #362c18;
+  --logo-page: #f4ecdd;
+  --logo-page-2: #e2d5be;
+  --sheet: #191e26;
+  --sheet-2: #222833;
+  --sheet-ink: #e4ddd0;
+  --device: #05090d;
+  --shadow-book: 0 1px 1px rgba(0, 0, 0, 0.3), 0 6px 14px rgba(0, 0, 0, 0.4), 0 16px 30px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------------------------------------------------------------- Base */
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 30;
+  background: var(--tinta);
+}
+img, svg { max-width: 100%; }
+a { color: inherit; }
+::selection { background: var(--brasa-soft); }
+:focus-visible { outline: 2px solid var(--brasa-fill); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+
+.wrap {
+  width: 100%;
+  max-width: calc(var(--wrap) + 40px);
+  margin-inline: auto;
+  padding-left: var(--gutter-l);
+  padding-right: var(--gutter-r);
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.eyebrow {
+  font-family: var(--font-ui);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brasa);
+}
+
+.h2 {
+  font-family: var(--font-serif);
+  font-weight: 620;
+  font-size: clamp(1.85rem, 1.2rem + 2.4vw, 2.9rem);
+  line-height: 1.08;
+  letter-spacing: -0.022em;
+}
+.lead {
+  font-family: var(--font-serif);
+  font-size: clamp(1.06rem, 1rem + 0.3vw, 1.22rem);
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 34em;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+.icon { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------------------------------------------------------------- Topo */
+
+.band {
+  background:
+    radial-gradient(120% 70% at 85% 0%, #24394f 0%, transparent 60%),
+    linear-gradient(180deg, var(--tinta) 0%, var(--tinta-deep) 100%);
+  color: var(--on-tinta);
+  position: relative;
+}
+
+.nav {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 20;
+  background: color-mix(in srgb, var(--tinta) 88%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+.nav.is-scrolled { border-bottom-color: var(--on-tinta-line); }
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 68px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--on-tinta);
+}
+.brand svg { width: 34px; height: 34px; }
+.brand span {
+  font-family: var(--font-serif);
+  font-weight: 650;
+  font-size: 1.32rem;
+  letter-spacing: -0.015em;
+}
+.nav-links {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  list-style: none;
+  padding: 0;
+  margin-block: 0;
+}
+.nav-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 550;
+  color: var(--on-tinta-2);
+  text-decoration: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.nav-links a:hover { color: var(--on-tinta); background: rgba(244, 236, 221, 0.07); }
+.nav .btn { min-height: 40px; padding: 0 16px; font-size: 0.88rem; }
+.lang-wait body { opacity: 0; }
+
+/* Troca de idioma: dois botões, o ativo em papel */
+.lang {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--on-tinta-line);
+  border-radius: 999px;
+}
+.lang button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  color: var(--on-tinta-2);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.lang button:hover:not([aria-pressed='true']) { color: var(--on-tinta); }
+.lang button[aria-pressed='true'] { background: var(--on-tinta); color: var(--tinta); }
+.lang button:focus-visible { outline: 2px solid var(--brasa-fill); outline-offset: 2px; }
+.nav .lang + .btn { margin-left: -12px; }
+
+.btn-paper { background: var(--on-tinta); color: var(--tinta); }
+.btn-paper:hover { background: #fffaf1; }
+.btn-line { color: var(--on-tinta); border-color: var(--on-tinta-line); }
+.btn-line:hover { border-color: var(--on-tinta-2); background: rgba(244, 236, 221, 0.05); }
+
+/* ---------------------------------------------------------------- Hero */
+
+.hero { padding-block: clamp(36px, 4.6vw, 64px) 0; }
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: 28px 64px;
+  align-items: end;
+}
+.hero .eyebrow { color: var(--ember-on-tinta); margin-bottom: 22px; display: block; }
+.hero h1 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: clamp(2.4rem, 1.3rem + 3.9vw, 4.15rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+.hero h1 em {
+  font-style: normal;
+  color: var(--ember-on-tinta);
+}
+.hero-side { display: grid; gap: 26px; padding-bottom: 8px; }
+.hero-side p {
+  font-family: var(--font-serif);
+  font-size: 1.12rem;
+  line-height: 1.6;
+  color: var(--on-tinta-2);
+}
+.hero-side p strong { color: var(--on-tinta); font-weight: 600; }
+.hero-ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* ---------------------------------------------------------------- Demo */
+
+.stage {
+  position: relative;
+  margin-top: clamp(40px, 5vw, 64px);
+  padding-bottom: 0;
+}
+.devices {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(190px, 21vw, 250px);
+  gap: clamp(28px, 6vw, 96px);
+  align-items: end;
+}
+
+/* Janela do app no PC */
+.laptop {
+  position: relative;
+  border-radius: 14px;
+  background: var(--device);
+  padding: 10px;
+  box-shadow: var(--shadow-device);
+  min-width: 0;
+}
+.screen {
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--sheet);
+  color: var(--sheet-ink);
+  display: flex;
+  flex-direction: column;
+}
+.app-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--sheet);
+  font-size: 0.82rem;
+}
+.app-bar svg.mark { width: 22px; height: 22px; }
+.app-bar .back {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--ink-3); font-weight: 600;
+}
+.app-bar .title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  color: var(--sheet-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.app-bar .title small { font-family: var(--font-ui); font-weight: 500; color: var(--ink-3); font-size: 0.78rem; margin-left: 6px; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 0 11px 0 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  white-space: nowrap;
+  margin-left: auto;
+  background: var(--mar-soft);
+  color: var(--mar);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.is-syncing { background: var(--warn-soft); color: var(--warn); }
+.pill.is-syncing i { animation: pulse 0.9s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+
+.page {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  padding: clamp(22px, 3.4vw, 40px) clamp(22px, 5vw, 64px) 18px;
+  min-height: clamp(250px, 26vw, 318px);
+}
+.running-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 18px;
+}
+.chapter {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: 10px;
+  color: var(--sheet-ink);
+}
+.prose {
+  font-family: var(--font-serif);
+  font-size: clamp(0.94rem, 0.85rem + 0.35vw, 1.08rem);
+  line-height: 1.7;
+  hyphens: auto;
+  max-width: 36em;
+  transition: opacity 0.18s ease;
+}
+.prose.is-turning { opacity: 0; }
+
+/* zonas de toque 30/40/30 */
+.zones { position: absolute; inset: 0; display: grid; grid-template-columns: 30% 40% 30%; }
+.zones button {
+  all: unset;
+  cursor: pointer;
+  position: relative;
+}
+.zones button:focus-visible { outline: 2px solid var(--brasa-fill); outline-offset: -4px; border-radius: 6px; }
+.zones button:disabled { cursor: default; }
+.zones .z-prev:hover:not(:disabled) { background: linear-gradient(90deg, color-mix(in srgb, var(--brasa-fill) 9%, transparent), transparent); }
+.zones .z-next:hover:not(:disabled) { background: linear-gradient(270deg, color-mix(in srgb, var(--brasa-fill) 9%, transparent), transparent); }
+
+.reader-foot {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.track { height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.track > span { display: block; height: 100%; background: var(--brasa-fill); border-radius: inherit; transition: width 0.35s ease; }
+.turn-btns { display: inline-flex; gap: 2px; }
+.turn-btns button {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 26px; border-radius: 7px;
+  color: var(--ink-2);
+}
+.turn-btns button:hover:not(:disabled) { background: var(--sheet-2); color: var(--sheet-ink); }
+.turn-btns button:disabled { opacity: 0.35; cursor: default; }
+.turn-btns button:focus-visible { outline: 2px solid var(--brasa-fill); }
+.turn-btns .icon { width: 16px; height: 16px; stroke-width: 2.1; }
+
+/* Celular */
+.phone {
+  position: relative;
+  border-radius: 32px;
+  background: var(--device);
+  padding: 9px;
+  box-shadow: var(--shadow-device);
+  justify-self: end;
+  width: 100%;
+}
+.phone .screen { border-radius: 24px; aspect-ratio: 9 / 18.5; }
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 16px 4px;
+  font-size: 0.66rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.status-row .cam { width: 9px; height: 9px; border-radius: 50%; background: var(--device); }
+.phone .app-bar { padding: 6px 12px 8px; border-bottom: 0; transition: opacity 0.2s ease; }
+.phone .app-bar .pill { min-height: 22px; font-size: 0.66rem; padding: 0 8px 0 7px; }
+.phone .page { flex: 1; min-height: 0; padding: 14px 18px 10px; overflow: hidden; }
+.phone .running-head { font-size: 0.58rem; margin-bottom: 12px; }
+.phone .chapter { font-size: 0.86rem; }
+.phone .prose { font-size: 0.8rem; line-height: 1.62; hyphens: auto; }
+.phone .reader-foot { grid-template-columns: 1fr auto; padding: 8px 14px 14px; font-size: 0.64rem; transition: opacity 0.2s ease; }
+.phone.is-immersive .app-bar,
+.phone.is-immersive .reader-foot { opacity: 0; }
+
+.device-label {
+  position: absolute;
+  top: -30px;
+  left: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--on-tinta-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.device-label .icon { width: 15px; height: 15px; }
+
+/* O mar e a balsa */
+.lane {
+  position: relative;
+  margin-top: 14px;
+  height: 64px;
+  pointer-events: none;
+}
+.waves {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  background: var(--sea-on-tinta);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='14' viewBox='0 0 52 14'%3E%3Cpath d='M0 7 q13 -8.5 26 0 t26 0' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x 0 0 / 52px 14px;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='14' viewBox='0 0 52 14'%3E%3Cpath d='M0 7 q13 -8.5 26 0 t26 0' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x 0 0 / 52px 14px;
+  animation: drift 6s linear infinite;
+}
+.waves.back {
+  bottom: 16px;
+  opacity: 0.32;
+  animation-duration: 9s;
+  animation-direction: reverse;
+}
+@keyframes drift { to { -webkit-mask-position: 52px 0; mask-position: 52px 0; } }
+
+.ferry {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  width: 54px;
+  height: 54px;
+  transform: translateX(var(--x, 0px));
+  transition: transform 1.1s cubic-bezier(0.55, 0.05, 0.3, 1);
+}
+.ferry svg { width: 100%; height: 100%; animation: bob 2.6s ease-in-out infinite; transform-origin: 50% 80%; }
+.ferry.is-flipped svg { scale: -1 1; }
+@keyframes bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-3px) rotate(2deg); }
+}
+
+.stage-caption {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 20px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--on-tinta-2);
+}
+.stage-caption .log { color: var(--sea-on-tinta); font-variant-numeric: tabular-nums; }
+.stage-caption .hint b { color: var(--on-tinta); font-weight: 600; }
+
+/* borda inferior da faixa: uma onda que devolve para o papel */
+.band-edge {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin-top: 36px;
+  color: var(--bg);
+}
+
+/* ---------------------------------------------------------------- Seções */
+
+section.block { padding-block: clamp(72px, 9vw, 128px); }
+.block-head { display: grid; gap: 18px; max-width: 760px; margin-bottom: clamp(40px, 5vw, 64px); }
+
+/* Como funciona */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.step { display: grid; grid-template-rows: auto auto 1fr; gap: 14px; min-width: 0; }
+.step-fig {
+  height: 196px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow: hidden;
+}
+.step h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-family: var(--font-serif);
+  font-weight: 620;
+  font-size: 1.28rem;
+  letter-spacing: -0.012em;
+  margin-top: 8px;
+}
+.step h3::before {
+  counter-increment: step;
+  content: counter(step);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brasa);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  width: 24px; height: 24px;
+  display: inline-grid; place-items: center;
+  flex-shrink: 0;
+  transform: translateY(-2px);
+}
+.step p { color: var(--ink-2); max-width: 32em; }
+
+/* fig 1: árvore de pastas */
+.tree {
+  width: 100%;
+  max-width: 280px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.95;
+  color: var(--ink-2);
+}
+.tree div { display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree .icon { width: 15px; height: 15px; color: var(--ink-3); }
+.tree .d1 { padding-left: 18px; }
+.tree .d2 { padding-left: 36px; }
+.tree .fmt { margin-left: auto; font-size: 0.64rem; letter-spacing: 0.06em; color: var(--ink-3); }
+.tree .root { color: var(--ink); font-weight: 600; }
+.tree .root .icon { color: var(--brasa); }
+
+/* fig 2: QR */
+.qr-wrap { display: flex; align-items: center; gap: 18px; }
+.qr { width: 118px; height: 118px; padding: 8px; background: #fffdf8; border-radius: 10px; box-shadow: 0 0 0 1px var(--line); }
+.qr svg { display: block; width: 100%; height: 100%; }
+.qr-meta { display: grid; gap: 8px; font-size: 0.78rem; color: var(--ink-3); }
+.qr-meta b { font-family: var(--font-mono); font-size: 1.15rem; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.qr-meta .tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-weight: 650; color: var(--mar);
+}
+.qr-meta .tag .icon { width: 15px; height: 15px; }
+
+/* fig 3: duas pílulas */
+.handoff { display: grid; gap: 10px; width: 100%; max-width: 270px; }
+.handoff-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 0.8rem;
+}
+.handoff-row .icon { width: 17px; height: 17px; color: var(--ink-2); }
+.handoff-row b { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; font-size: 0.78rem; }
+.handoff-row .when { font-size: 0.7rem; color: var(--ink-3); }
+.handoff-arrow { justify-self: center; color: var(--logo-sea); }
+.handoff-arrow svg { width: 60px; height: 14px; display: block; }
+
+/* Leitura */
+.reading {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(40px, 6vw, 88px);
+  align-items: start;
+}
+.formats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; align-items: center; }
+.fmt-chip {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--tinta);
+  color: var(--on-tinta);
+}
+.fmt-chip.soon { background: transparent; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.formats .note { font-size: 0.8rem; color: var(--ink-3); margin-left: 4px; }
+
+.features {
+  margin: 40px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px 32px;
+}
+.features div { display: grid; gap: 4px; min-width: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.features dt { font-weight: 680; font-size: 0.96rem; }
+.features dd { margin: 0; color: var(--ink-2); font-size: 0.92rem; }
+.features code { font-family: var(--font-mono); font-size: 0.86em; color: var(--ink); }
+
+.shelf {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: clamp(20px, 3vw, 32px);
+  display: grid;
+  gap: 22px;
+}
+.shelf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.shelf-head h3 { font-family: var(--font-serif); font-weight: 620; font-size: 1.12rem; }
+.shelf-head span { font-size: 0.78rem; color: var(--ink-3); }
+
+.continue {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--bg);
+}
+.continue .cover { width: 76px; }
+.continue .cover .c-title { font-size: 0.6rem; padding: 0; }
+.continue .cover .c-art { padding: 18% 10% 10% 16%; gap: 5px; }
+.continue .cover .c-rule { width: 14px; }
+.continue-body { display: grid; gap: 7px; min-width: 0; }
+.continue-body h4 { margin: 0; font-family: var(--font-serif); font-weight: 620; font-size: 1.04rem; }
+.continue-body .meta { font-size: 0.78rem; color: var(--ink-3); display: flex; gap: 8px; flex-wrap: wrap; }
+.continue-body .meta b { color: var(--brasa); font-weight: 700; }
+.continue-body .cta { font-size: 0.82rem; font-weight: 650; color: var(--ink); display: inline-flex; gap: 6px; align-items: center; }
+.continue-body .cta .icon { width: 16px; height: 16px; }
+
+.covers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 16px; }
+.book { display: grid; gap: 10px; min-width: 0; }
+.cover {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  max-width: 100%;
+  border-radius: 3px 6px 6px 3px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: #fbf6ec;
+  box-shadow: var(--shadow-book);
+  background: var(--g);
+  transition: transform 0.25s ease;
+}
+.book:hover .cover { transform: translateY(-4px); }
+.cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(0,0,0,0.22) 0, rgba(255,255,255,0.14) 3px, rgba(0,0,0,0.08) 7px, transparent 12px);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+}
+.c-art { display: flex; flex-direction: column; gap: 8px; padding: 20% 12% 12% 16%; flex: 1; }
+.c-rule { width: 22px; height: 2px; border-radius: 2px; background: currentColor; opacity: 0.55; }
+.c-title {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: clamp(0.72rem, 0.55rem + 0.5vw, 0.92rem);
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.c-initial {
+  position: absolute; right: 8%; bottom: 6%;
+  font-family: var(--font-serif); font-weight: 700; font-size: 3.2rem; line-height: 1; opacity: 0.12;
+}
+.c-badge {
+  position: absolute; left: 8px; bottom: 9px; z-index: 2;
+  padding: 2px 6px; border-radius: 5px;
+  font-size: 0.56rem; font-weight: 800; letter-spacing: 0.08em;
+  background: rgba(15, 18, 24, 0.55); color: #fff;
+}
+.c-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; z-index: 2; background: rgba(0,0,0,0.3); }
+.c-progress span { display: block; height: 100%; background: #e07b3c; }
+.book-title { font-family: var(--font-serif); font-weight: 600; font-size: 0.86rem; line-height: 1.28; overflow-wrap: anywhere; }
+.book-meta { font-size: 0.72rem; color: var(--ink-3); display: flex; gap: 6px; }
+.book-meta .pct { font-weight: 700; color: var(--brasa); }
+.book-meta .pct.new { color: var(--mar); }
+.book-meta .pct.done { color: var(--ink-3); }
+
+/* Privacidade */
+.privacy-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 88px);
+  align-items: start;
+}
+
+.topo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, 1.1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0;
+  padding: clamp(22px, 3vw, 34px);
+  border-radius: 18px;
+  background: var(--tinta);
+  color: var(--on-tinta);
+}
+.node {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  text-align: center;
+  padding: 18px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--on-tinta-line);
+  background: rgba(244, 236, 221, 0.03);
+  min-width: 0;
+}
+.node .icon { width: 28px; height: 28px; color: var(--on-tinta); stroke-width: 1.5; }
+.node b { font-weight: 650; font-size: 0.92rem; }
+.node small { font-family: var(--font-mono); font-size: 0.66rem; color: var(--on-tinta-2); line-height: 1.5; }
+.link {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--sea-on-tinta);
+  text-align: center;
+}
+.link::before {
+  content: '';
+  width: 100%;
+  height: 10px;
+  background: var(--sea-on-tinta);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='10' viewBox='0 0 26 10'%3E%3Cpath d='M0 5 q6.5 -6 13 0 t13 0' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x center / 26px 10px;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='10' viewBox='0 0 26 10'%3E%3Cpath d='M0 5 q6.5 -6 13 0 t13 0' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x center / 26px 10px;
+}
+.relay {
+  grid-column: 1 / -1;
+  margin-top: 22px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px dashed var(--on-tinta-line);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--on-tinta-2);
+}
+.relay .icon { width: 20px; height: 20px; color: var(--on-tinta-2); }
+.relay b { color: var(--on-tinta); font-weight: 600; }
+.relay .soon { margin-left: auto; font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ember-on-tinta); white-space: nowrap; }
+
+.facts { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.facts li { display: grid; gap: 6px; padding-block: 22px; border-top: 1px solid var(--line); }
+.facts li:last-child { border-bottom: 1px solid var(--line); }
+.facts h3 { font-family: var(--font-serif); font-weight: 620; font-size: 1.14rem; }
+.facts p { color: var(--ink-2); font-size: 0.96rem; }
+
+.resume {
+  margin-top: 14px;
+  max-width: 360px;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), 0 12px 30px -16px rgba(30, 24, 14, 0.35);
+  display: grid;
+  gap: 8px;
+}
+.resume h4 { margin: 0; font-family: var(--font-serif); font-weight: 620; font-size: 1rem; }
+.resume p { font-size: 0.84rem; color: var(--ink-2); }
+.resume .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.resume .acts span {
+  display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px;
+  border-radius: 999px; font-size: 0.8rem; font-weight: 650;
+}
+.resume .acts .sec { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.resume .acts .pri { background: var(--ink); color: var(--bg); }
+
+.limit {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+.limit .icon { color: var(--ink-3); margin-top: 2px; }
+.limit b { color: var(--ink); }
+
+/* Plataformas */
+.platforms { border-top: 1px solid var(--line-strong); }
+.platform {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(0, 1.6fr) auto;
+  gap: 8px 32px;
+  align-items: baseline;
+  padding-block: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.platform h3 { font-family: var(--font-serif); font-weight: 620; font-size: 1.12rem; }
+.platform p { color: var(--ink-2); font-size: 0.94rem; }
+.platform code { font-family: var(--font-mono); font-size: 0.84em; color: var(--ink); }
+.status {
+  justify-self: end;
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 0.76rem; font-weight: 700;
+  padding: 4px 11px 4px 9px; border-radius: 999px;
+  white-space: nowrap;
+}
+.status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.status.ok { background: var(--mar-soft); color: var(--mar); }
+.status.next { background: var(--brasa-soft); color: var(--brasa); }
+.status.later { background: var(--surface-2); color: var(--ink-3); }
+.status.later i { background: transparent; border: 1.5px solid currentColor; }
+
+/* Fecho */
+.closing { padding-block: clamp(64px, 8vw, 104px); }
+.closing-inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 28px 44px;
+  align-items: center;
+}
+.closing .mark-lg { width: clamp(84px, 10vw, 120px); height: auto; }
+.closing h2 { font-family: var(--font-serif); font-weight: 600; font-size: clamp(1.8rem, 1.2rem + 2.2vw, 2.7rem); line-height: 1.1; letter-spacing: -0.022em; }
+.closing p { margin-top: 10px; color: var(--on-tinta-2); font-family: var(--font-serif); font-size: 1.06rem; max-width: 36em; }
+
+footer.foot {
+  border-top: 1px solid var(--on-tinta-line);
+  padding-block: 26px;
+  font-size: 0.8rem;
+  color: var(--on-tinta-2);
+}
+.foot-inner { display: flex; flex-wrap: wrap; gap: 10px 28px; justify-content: space-between; }
+.foot a { color: var(--on-tinta); text-decoration-color: var(--on-tinta-line); text-underline-offset: 3px; }
+
+/* ---------------------------------------------------------------- Responsivo */
+
+@media (max-width: 980px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .hero-side { max-width: 560px; }
+  .reading, .privacy-grid { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; gap: 40px; }
+  .step { grid-template-columns: minmax(0, 260px) minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 28px; align-items: start; }
+  .step-fig { grid-row: 1 / span 2; }
+  .step h3 { margin-top: 0; }
+}
+@media (max-width: 820px) {
+  .nav-links { display: none; }
+  .nav-inner { gap: 10px; }
+  .lang { margin-left: auto; }
+  .nav .lang + .btn { margin-left: 0; }
+  .platform { grid-template-columns: minmax(0, 1fr) auto; }
+  .platform p { grid-column: 1 / -1; grid-row: 2; }
+  .closing-inner { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  /* PC na largura toda, celular sobreposto no canto, sem cobrir o texto do PC */
+  .btn-code span { display: none; }
+  .nav .btn-code { width: 40px; padding: 0; justify-content: center; }
+  .devices { display: block; position: relative; padding-bottom: 40px; }
+  .laptop { padding: 7px; border-radius: 11px; }
+  .laptop .page { padding: 16px 146px 12px 16px; min-height: 236px; }
+  .laptop .running-head { display: none; }
+  .laptop .prose { font-size: 0.84rem; line-height: 1.6; }
+  .laptop .reader-foot { padding-right: 146px; }
+  .laptop .reader-foot .track { display: none; }
+  .laptop .reader-foot { grid-template-columns: 1fr auto; }
+  .phone { position: absolute; right: 8px; bottom: 0; width: 124px; }
+  .app-bar .title small { display: none; }
+  .phone { border-radius: 22px; padding: 6px; }
+  .phone .screen { border-radius: 17px; }
+  .phone .page { padding: 10px 11px 6px; }
+  .phone .prose { font-size: 0.62rem; line-height: 1.55; }
+  .phone .chapter { font-size: 0.7rem; margin-bottom: 6px; }
+  .phone .running-head { display: none; }
+  .phone .app-bar .title { display: none; }
+  .phone .app-bar svg.mark { width: 16px; height: 16px; }
+  .phone .reader-foot { padding: 6px 10px 10px; font-size: 0.56rem; gap: 6px; }
+  .status-row { padding: 7px 11px 2px; font-size: 0.56rem; }
+  .ferry { width: 44px; height: 44px; }
+  .phone .device-label { display: none; }
+  .stage-caption { flex-direction: column; }
+  .step { grid-template-columns: 1fr; }
+  .step-fig { grid-row: auto; height: 180px; }
+  .covers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .features { grid-template-columns: 1fr; }
+  .topo { grid-template-columns: 1fr; gap: 0; }
+  .link { padding: 14px 0; }
+  .link::before { width: 10px; height: 46px; -webkit-mask-size: 10px 26px; mask-size: 10px 26px; -webkit-mask-repeat: repeat-y; mask-repeat: repeat-y;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='26' viewBox='0 0 10 26'%3E%3Cpath d='M5 0 q-6 6.5 0 13 t0 13' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='26' viewBox='0 0 10 26'%3E%3Cpath d='M5 0 q-6 6.5 0 13 t0 13' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E"); }
+  .relay { flex-wrap: wrap; }
+  .relay .soon { margin-left: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waves, .ferry svg, .pill.is-syncing i { animation: none; }
+  .ferry { transition: none; }
+  .prose, .track > span { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- Símbolo completo, cores pelos tokens (mesma geometria de app/branding/mark.svg) -->
+    <symbol id="mark" viewBox="170 190 684 690">
+      <g transform="translate(0 -20)">
+        <rect x="500" y="226" width="24" height="236" rx="12" fill="var(--mk-page, #F4ECDD)" />
+        <path d="M524 234 C584 246 640 280 708 298 C640 318 584 352 524 366 Z" fill="#E8874A" />
+        <path d="M512 458 C432 412 330 402 236 426 L236 628 C330 606 432 614 512 660 Z" fill="var(--mk-page, #F4ECDD)" />
+        <path d="M512 458 C592 412 694 402 788 426 L788 628 C694 606 592 614 512 660 Z" fill="var(--mk-page-2, #E2D5BE)" />
+        <path d="M196 642 C320 614 430 626 512 678 C594 626 704 614 828 642 L770 744 C690 728 590 738 512 774 C434 738 334 728 254 744 Z" fill="#E8874A" />
+        <path d="M196 840 q52 -34 104 0 t104 0 t104 0 t104 0 t104 0 t104 0" fill="none" stroke="#5FA7A3" stroke-width="32" stroke-linecap="round" />
+      </g>
+    </symbol>
+    <!-- Sem ondas: a balsa da demonstração (as ondas são o próprio mar) -->
+    <symbol id="boat" viewBox="180 210 664 580">
+      <rect x="500" y="226" width="24" height="236" rx="12" fill="#F4ECDD" />
+      <path d="M524 234 C584 246 640 280 708 298 C640 318 584 352 524 366 Z" fill="#E8874A" />
+      <path d="M512 458 C432 412 330 402 236 426 L236 628 C330 606 432 614 512 660 Z" fill="#F4ECDD" />
+      <path d="M512 458 C592 412 694 402 788 426 L788 628 C694 606 592 614 512 660 Z" fill="#E2D5BE" />
+      <path d="M196 642 C320 614 430 626 512 678 C594 626 704 614 828 642 L770 744 C690 728 590 738 512 774 C434 738 334 728 254 744 Z" fill="#E8874A" />
+    </symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><rect x="6" y="3.5" width="12" height="17" rx="2" /><path d="M9 8h6M9 11.5h6M9 15h3.5" /></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.2" /><path d="M11 17.5h2" /></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8.5 20h7M12 16v4" /></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.6v5.4c0 4.3-2.9 7.6-7 9-4.1-1.4-7-4.7-7-9V6.1z" /><path d="M9 12l2 2 4-4" /></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5h10a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7.1 9.6 4.5 4.5 0 0 0 7 18.5z" /></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5zM12 6.5V20" /></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3.5v8M7.05 6.4a7.5 7.5 0 1 0 9.9 0" /></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M9 7l-5 5 5 5M15 7l5 5-5 5" /></symbol>
+  </defs>
+</svg>
+
+<div class="band">
+  <header class="nav" id="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#topo" aria-label="Bookferry, início" data-i18n-aria="nav.home">
+        <svg aria-hidden="true"><use href="#mark" /></svg>
+        <span>Bookferry</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#como-funciona" data-i18n="nav.how">Como funciona</a></li>
+        <li><a href="#leitura" data-i18n="nav.reading">Leitura</a></li>
+        <li><a href="#privacidade" data-i18n="nav.privacy">Privacidade</a></li>
+        <li><a href="#plataformas" data-i18n="nav.platforms">Plataformas</a></li>
+      </ul>
+      <div class="lang" role="group" aria-label="Idioma" data-i18n-aria="nav.lang">
+        <button type="button" data-set-lang="pt" aria-pressed="true" lang="pt-BR" title="Português">PT</button>
+        <button type="button" data-set-lang="en" aria-pressed="false" lang="en" title="English">EN</button>
+      </div>
+      <a class="btn btn-line btn-code" href="https://github.com/Caspiom/bookferry" aria-label="Código no GitHub" data-i18n-aria="nav.codeAria">
+        <svg aria-hidden="true"><use href="#i-code" /></svg><span data-i18n="nav.code">Código</span>
+      </a>
+    </div>
+  </header>
+
+  <main id="topo">
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-grid">
+          <div>
+            <span class="eyebrow" data-i18n="hero.eyebrow">Leitor de livros e quadrinhos · PC e Android</span>
+            <h1 data-i18n="hero.title">Feche o livro no computador. Abra no celular <em>na mesma página.</em></h1>
+          </div>
+          <div class="hero-side">
+            <p data-i18n="hero.lead">O Bookferry guarda a biblioteca no <strong>seu</strong> PC e leva o ponto onde você parou até o celular pela rede de casa. Sem conta, sem assinatura, sem nuvem de terceiros.</p>
+            <div class="hero-ctas">
+              <a class="btn btn-paper" href="#como-funciona"><span data-i18n="nav.how">Como funciona</span>
+                <svg aria-hidden="true"><use href="#i-arrow" /></svg>
+              </a>
+              <a class="btn btn-line" href="#plataformas" data-i18n="hero.cta2">Linux e Android</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Demonstração: vire a página em um aparelho e a balsa leva a posição ao outro -->
+        <div class="stage" id="stage" aria-label="Demonstração da sincronização entre PC e celular" data-i18n-aria="demo.aria">
+          <div class="devices">
+            <div class="laptop" id="dev-pc">
+              <span class="device-label"><svg class="icon" aria-hidden="true"><use href="#i-monitor" /></svg><span data-i18n="demo.labelPc">seu PC</span></span>
+              <div class="screen">
+                <div class="app-bar">
+                  <span class="back"><svg class="icon" style="width:16px;height:16px" aria-hidden="true"><use href="#i-left" /></svg></span>
+                  <span class="title"><span data-book-title>Dom Casmurro</span><small data-book-byline>Machado de Assis · EPUB</small></span>
+                  <span class="pill" data-pill><i></i><span data-pill-text>Conectado</span></span>
+                </div>
+                <div class="page">
+                  <div class="running-head"><span data-book-title>Dom Casmurro</span><span data-chapter-short>Capítulo I</span></div>
+                  <h3 class="chapter" data-chapter>I · Do título</h3>
+                  <p class="prose" data-prose></p>
+                  <div class="zones">
+                    <button class="z-prev" type="button" data-turn="-1" aria-label="Página anterior no PC" data-i18n-aria="demo.prevPc"></button>
+                    <button class="z-mid" type="button" tabindex="-1" aria-hidden="true"></button>
+                    <button class="z-next" type="button" data-turn="1" aria-label="Próxima página no PC" data-i18n-aria="demo.nextPc"></button>
+                  </div>
+                </div>
+                <div class="reader-foot">
+                  <span data-page>pág. 9 de 256</span>
+                  <div class="track"><span data-track></span></div>
+                  <span class="turn-btns">
+                    <button type="button" data-turn="-1" aria-label="Página anterior no PC" data-i18n-aria="demo.prevPc"><svg class="icon" aria-hidden="true"><use href="#i-left" /></svg></button>
+                    <button type="button" data-turn="1" aria-label="Próxima página no PC" data-i18n-aria="demo.nextPc"><svg class="icon" aria-hidden="true"><use href="#i-right" /></svg></button>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="phone" id="dev-phone">
+              <span class="device-label"><svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg><span data-i18n="demo.labelPhone">celular</span></span>
+              <div class="screen">
+                <div class="status-row"><span data-clock>21:40</span><span class="cam"></span><span>Wi‑Fi</span></div>
+                <div class="app-bar">
+                  <svg class="mark" aria-hidden="true" style="--mk-page: var(--logo-page); --mk-page-2: var(--logo-page-2)"><use href="#mark" /></svg>
+                  <span class="title" data-book-title>Dom Casmurro</span>
+                  <span class="pill" data-pill><i></i><span data-pill-text>Conectado</span></span>
+                </div>
+                <div class="page">
+                  <div class="running-head"><span data-book-title>Dom Casmurro</span></div>
+                  <h3 class="chapter" data-chapter>I · Do título</h3>
+                  <p class="prose" data-prose></p>
+                  <div class="zones">
+                    <button class="z-prev" type="button" data-turn="-1" aria-label="Página anterior no celular" data-i18n-aria="demo.prevPhone"></button>
+                    <button class="z-mid" type="button" data-immersive aria-label="Mostrar ou esconder os controles do celular" data-i18n-aria="demo.immersive"></button>
+                    <button class="z-next" type="button" data-turn="1" aria-label="Próxima página no celular" data-i18n-aria="demo.nextPhone"></button>
+                  </div>
+                </div>
+                <div class="reader-foot">
+                  <div class="track"><span data-track></span></div>
+                  <span data-page-short>9/256</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lane" aria-hidden="true">
+            <div class="waves back"></div>
+            <div class="waves"></div>
+            <div class="ferry" id="ferry"><svg><use href="#boat" /></svg></div>
+          </div>
+
+          <div class="stage-caption">
+            <span class="hint" data-i18n="demo.hint"><b>Experimente:</b> toque na borda direita de uma das telas para virar a página.</span>
+            <span class="log" id="log" aria-live="polite">pág. 9 · epubcfi(/6/4!/4/2/1:0) · os dois aparelhos em dia</span>
+          </div>
+        </div>
+      </div>
+
+      <svg class="band-edge" viewBox="0 0 1440 40" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 22 C120 6 240 6 360 22 S600 38 720 22 960 6 1080 22 1320 38 1440 22 V40 H0 Z" fill="currentColor" />
+      </svg>
+    </section>
+  </main>
+</div>
+
+<!-- ============================================================ Como funciona -->
+<section class="block" id="como-funciona">
+  <div class="wrap">
+    <div class="block-head">
+      <span class="eyebrow" data-i18n="nav.how">Como funciona</span>
+      <h2 class="h2" data-i18n="how.title">Seu PC é o servidor. O celular é o leitor de bolso.</h2>
+      <p class="lead" data-i18n="how.lead">Não existe um servidor nosso no meio. O app do computador já traz o servidor embutido e o celular conversa direto com ele.</p>
+    </div>
+
+    <ol class="steps">
+      <li class="step">
+        <div class="step-fig" aria-hidden="true">
+          <div class="tree">
+            <div class="root"><svg class="icon"><use href="#i-folder" /></svg><span data-i18n="tree.root">~/Livros</span></div>
+            <div class="d1"><svg class="icon"><use href="#i-folder" /></svg><span data-i18n="tree.author">Machado de Assis</span></div>
+            <div class="d2"><svg class="icon"><use href="#i-file" /></svg><span data-i18n="tree.b1">Dom Casmurro</span><span class="fmt">EPUB</span></div>
+            <div class="d2"><svg class="icon"><use href="#i-file" /></svg><span data-i18n="tree.b2">Brás Cubas</span><span class="fmt">EPUB</span></div>
+            <div class="d1"><svg class="icon"><use href="#i-folder" /></svg><span data-i18n="tree.comics">Quadrinhos</span></div>
+            <div class="d2"><svg class="icon"><use href="#i-file" /></svg>Little Nemo, vol. 1<span class="fmt">CBZ</span></div>
+          </div>
+        </div>
+        <h3 data-i18n="how.s1t">Escolha a pasta dos livros</h3>
+        <p data-i18n="how.s1d">No computador, aponte a pasta onde ficam seus EPUB, PDF e CBZ. O Bookferry liga o servidor local e monta a biblioteca respeitando as subpastas.</p>
+      </li>
+      <li class="step">
+        <div class="step-fig" aria-hidden="true">
+          <div class="qr-wrap">
+            <div class="qr" id="qr"></div>
+            <div class="qr-meta">
+              <span data-i18n="how.expires">expira em</span>
+              <b id="qr-timer">4:52</b>
+              <span class="tag"><svg class="icon"><use href="#i-shield" /></svg><span data-i18n="how.pinned">certificado fixado</span></span>
+            </div>
+          </div>
+        </div>
+        <h3 data-i18n="how.s2t">Pareie com um QR code</h3>
+        <p data-i18n="how.s2d">No celular, leia o QR que aparece nos Ajustes do PC. Não há conta nem senha: o celular guarda o certificado do seu computador e só conversa com ele.</p>
+      </li>
+      <li class="step">
+        <div class="step-fig" aria-hidden="true">
+          <div class="handoff">
+            <div class="handoff-row">
+              <svg class="icon"><use href="#i-monitor" /></svg>
+              <span data-i18n="how.closedPc">Fechou no PC</span>
+              <b data-i18n="how.p50">pág. 50</b>
+            </div>
+            <div class="handoff-arrow">
+              <svg viewBox="0 0 60 14"><path d="M2 7 q7 -7 14 0 t14 0 t14 0 t14 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" /></svg>
+            </div>
+            <div class="handoff-row">
+              <svg class="icon"><use href="#i-phone" /></svg>
+              <span data-i18n="how.openedPhone">Abriu no celular</span>
+              <b data-i18n="how.p50">pág. 50</b>
+            </div>
+          </div>
+        </div>
+        <h3 data-i18n="how.s3t">Leia onde estiver</h3>
+        <p data-i18n="how.s3d">Baixe o livro para o celular quando quiser. Cada página virada vai para o outro aparelho, e quem abrir o livro depois retoma dali.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================ Leitura -->
+<section class="block" id="leitura" style="padding-top: 0">
+  <div class="wrap reading">
+    <div>
+      <div class="block-head" style="margin-bottom: 0">
+        <span class="eyebrow" data-i18n="nav.reading">Leitura</span>
+        <h2 class="h2" data-i18n="read.title">Um leitor de verdade, para livro e para quadrinho.</h2>
+        <p class="lead" data-i18n="read.lead">EPUB com texto que se ajusta à tela, PDF página a página e quadrinhos com página dupla e leitura da direita para a esquerda, para mangá.</p>
+      </div>
+      <div class="formats" aria-label="Formatos" data-i18n-aria="read.formats">
+        <span class="fmt-chip">EPUB</span>
+        <span class="fmt-chip">PDF</span>
+        <span class="fmt-chip">CBZ</span>
+        <span class="fmt-chip soon">CBR</span>
+        <span class="fmt-chip soon">MOBI</span>
+        <span class="fmt-chip soon">FB2</span>
+        <span class="note" data-i18n="read.soon">os contornados vêm a seguir</span>
+      </div>
+      <dl class="features">
+        <div><dt data-i18n="read.f1t">Painel Aa por livro</dt><dd data-i18n="read.f1d">Fonte, tamanho, margens e tema ficam salvos em cada livro, com predefinições para trocar rápido.</dd></div>
+        <div><dt data-i18n="read.f2t">Claro, escuro e sépia</dt><dd data-i18n="read.f2d">Temas pensados para ler à noite sem acender a sala inteira.</dd></div>
+        <div><dt data-i18n="read.f3t">Toque em três faixas</dt><dd data-i18n="read.f3d">30% da tela volta, 40% mostra os controles, 30% avança. No Android, as teclas de volume também viram a página.</dd></div>
+        <div><dt data-i18n="read.f4t">Modo imersivo</dt><dd data-i18n="read.f4d">Tela cheia sem barras, e atalhos de teclado no computador.</dd></div>
+        <div><dt data-i18n="read.f5t">Capas que faltam</dt><dd data-i18n="read.f5d">Busca a capa na Open Library pelo nome do livro, ou usa a imagem que você escolher.</dd></div>
+        <div><dt data-i18n="read.f6t">Posição exata</dt><dd data-i18n="read.f6d">Em EPUB a posição é um <code>epubcfi</code>, não uma porcentagem. Em PDF e CBZ, o número da página.</dd></div>
+      </dl>
+    </div>
+
+    <div class="shelf" aria-label="Exemplo da biblioteca" data-i18n-aria="shelf.aria">
+      <div class="shelf-head"><h3 data-i18n="shelf.continue">Continuar lendo</h3><span data-i18n="shelf.example">exemplo</span></div>
+      <div class="continue">
+        <div class="cover" style="--g: linear-gradient(160deg, hsl(208, 30%, 38%), hsl(222, 36%, 24%))">
+          <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.c0">Dom Casmurro</span></div>
+        </div>
+        <div class="continue-body">
+          <h4 data-i18n="shelf.c0">Dom Casmurro</h4>
+          <div class="meta"><span data-i18n="shelf.c0author">Machado de Assis</span><span>·</span><b>38%</b><span data-i18n="shelf.c0when">· no celular há 12 min</span></div>
+          <div class="track"><span style="width: 38%"></span></div>
+          <span class="cta"><span data-i18n="shelf.cta">Continuar</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg></span>
+        </div>
+      </div>
+
+      <div class="shelf-head"><h3 data-i18n="shelf.library">Biblioteca</h3><span data-i18n="shelf.count">4 de 212 livros</span></div>
+      <div class="covers">
+        <div class="book">
+          <div class="cover" style="--g: linear-gradient(160deg, hsl(22, 34%, 40%), hsl(8, 38%, 24%))">
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.b1">Memórias Póstumas de Brás Cubas</span></div>
+            <span class="c-initial" aria-hidden="true" data-i18n="shelf.b1i">M</span>
+            <span class="c-badge">EPUB</span>
+          </div>
+          <div class="book-title" data-i18n="shelf.b1">Memórias Póstumas de Brás Cubas</div>
+          <div class="book-meta"><span class="pct new" data-i18n="shelf.new">Novo</span></div>
+        </div>
+        <div class="book">
+          <div class="cover" style="--g: linear-gradient(160deg, hsl(176, 30%, 34%), hsl(196, 36%, 20%))">
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" lang="en">Little Nemo in Slumberland</span></div>
+            <span class="c-initial" aria-hidden="true">L</span>
+            <span class="c-badge">CBZ</span>
+            <span class="c-progress"><span style="width: 72%"></span></span>
+          </div>
+          <div class="book-title">Little Nemo in Slumberland</div>
+          <div class="book-meta"><span class="pct">72%</span><span data-i18n="shelf.comics">· Quadrinhos</span></div>
+        </div>
+        <div class="book">
+          <div class="cover" style="--g: linear-gradient(160deg, hsl(40, 28%, 40%), hsl(28, 34%, 24%))">
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.b3">O Cortiço</span></div>
+            <span class="c-initial" aria-hidden="true" data-i18n="shelf.b3i">O</span>
+            <span class="c-badge">PDF</span>
+            <span class="c-progress"><span style="width: 100%"></span></span>
+          </div>
+          <div class="book-title" data-i18n="shelf.b3">O Cortiço</div>
+          <div class="book-meta"><span class="pct done" data-i18n="shelf.done">Lido</span></div>
+        </div>
+        <div class="book">
+          <div class="cover" style="--g: linear-gradient(160deg, hsl(262, 18%, 38%), hsl(238, 26%, 22%))">
+            <div class="c-art"><span class="c-rule"></span><span class="c-title" data-i18n="shelf.b4">Os Lusíadas</span></div>
+            <span class="c-initial" aria-hidden="true" data-i18n="shelf.b4i">O</span>
+            <span class="c-badge">PDF</span>
+            <span class="c-progress"><span style="width: 12%"></span></span>
+          </div>
+          <div class="book-title" data-i18n="shelf.b4">Os Lusíadas</div>
+          <div class="book-meta"><span class="pct">12%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Privacidade -->
+<section class="block" id="privacidade" style="padding-top: 0">
+  <div class="wrap">
+    <div class="block-head">
+      <span class="eyebrow" data-i18n="priv.eyebrow">Privacidade e sincronização</span>
+      <h2 class="h2" data-i18n="priv.title">Seus livros não saem de casa.</h2>
+      <p class="lead" data-i18n="priv.lead">A biblioteca e o banco de dados ficam no seu computador. O celular acha o PC na rede Wi‑Fi e fala com ele por uma conexão cifrada. Ninguém além de você sabe o que você está lendo.</p>
+    </div>
+
+    <div class="privacy-grid">
+      <div>
+        <div class="topo" role="img" aria-label="O celular se conecta ao PC pela rede Wi-Fi de casa, com conexão cifrada. Um relay opcional para fora de casa está nos próximos passos." data-i18n-aria="priv.topoAria">
+          <div class="node">
+            <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
+            <b data-i18n="priv.phone">Celular</b>
+            <small data-i18n="priv.phoneNote">livros baixados<br />fila de mudanças</small>
+          </div>
+          <div class="link"><span data-i18n="priv.link">Wi‑Fi de casa<br />TLS · mDNS</span></div>
+          <div class="node">
+            <svg class="icon" aria-hidden="true"><use href="#i-monitor" /></svg>
+            <b data-i18n="priv.pc">Seu PC</b>
+            <small data-i18n="priv.pcNote">biblioteca<br />servidor + SQLite</small>
+          </div>
+          <div class="relay">
+            <svg class="icon" aria-hidden="true"><use href="#i-cloud" /></svg>
+            <span data-i18n="priv.relay"><b>Fora de casa:</b> um relay opcional que só repassa bytes cifrados de ponta a ponta. Não guarda nem lê nada.</span>
+            <span class="soon" data-i18n="priv.soon">a seguir</span>
+          </div>
+        </div>
+
+        <div class="limit">
+          <svg class="icon" aria-hidden="true"><use href="#i-power" /></svg>
+          <p data-i18n="priv.limit"><b>O preço de não depender de nuvem:</b> com o PC desligado, o celular não sincroniza nem baixa livros novos. Os livros que já estão nele continuam abrindo normalmente.</p>
+        </div>
+      </div>
+
+      <ul class="facts">
+        <li>
+          <h3 data-i18n="priv.f1t">Leu sem internet? Tudo bem.</h3>
+          <p data-i18n="priv.f1d">No ônibus ou no avião, cada página virada fica numa fila no celular. Quando o PC aparecer na rede, a fila vai para ele sozinha.</p>
+        </li>
+        <li>
+          <h3 data-i18n="priv.f2t">Quando os dois aparelhos leram</h3>
+          <p data-i18n="priv.f2d">Se o outro aparelho tem uma posição mais recente, mas atrás da sua, o Bookferry pergunta antes de te levar para trás.</p>
+          <div class="resume" aria-label="Exemplo da pergunta de retomada" data-i18n-aria="priv.resumeAria">
+            <h4 data-i18n="priv.resumeT">Continuar de onde parou?</h4>
+            <p data-i18n="priv.resumeD">No PC você parou na pág. 42, há 5 min. Neste celular você está na pág. 50.</p>
+            <div class="acts"><span class="sec" data-i18n="priv.stay">Ficar aqui</span><span class="pri" data-i18n="priv.go">Continuar lá</span></div>
+          </div>
+        </li>
+        <li>
+          <h3 data-i18n="priv.f3t">Sem conta para criar</h3>
+          <p data-i18n="priv.f3d">O pareamento é o QR code e mais nada. Para tirar um aparelho, revogue nos Ajustes do PC.</p>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Plataformas -->
+<section class="block" id="plataformas" style="padding-top: 0">
+  <div class="wrap">
+    <div class="block-head">
+      <span class="eyebrow" data-i18n="nav.platforms">Plataformas</span>
+      <h2 class="h2" data-i18n="plat.title">Onde roda hoje, e o que vem depois.</h2>
+      <p class="lead" data-i18n="plat.lead">O Bookferry está na primeira versão. Esta é a lista sem enfeite.</p>
+    </div>
+
+    <div class="platforms">
+      <div class="platform">
+        <h3>Linux</h3>
+        <p data-i18n="plat.linux">App de desktop com servidor embutido. Inclui módulo para <code>NixOS</code>.</p>
+        <span class="status ok"><i></i><span data-i18n="st.early">Versão inicial</span></span>
+      </div>
+      <div class="platform">
+        <h3>Android</h3>
+        <p data-i18n="plat.android">Leitor e cliente de sincronização, com download dos livros sob demanda.</p>
+        <span class="status ok"><i></i><span data-i18n="st.early">Versão inicial</span></span>
+      </div>
+      <div class="platform">
+        <h3 data-i18n="plat.relayT">Leitura fora de casa</h3>
+        <p data-i18n="plat.relayD">Relay sem estado, cifrado de ponta a ponta, para sincronizar longe da rede de casa.</p>
+        <span class="status next"><i></i><span data-i18n="st.next">A seguir</span></span>
+      </div>
+      <div class="platform">
+        <h3 data-i18n="plat.fmtT">Mais formatos</h3>
+        <p data-i18n="plat.fmtD"><code>CBR</code>, <code>CB7</code>, <code>MOBI</code>, <code>AZW3</code> e <code>FB2</code>, séries de quadrinhos e lista “Ler a seguir” sincronizada.</p>
+        <span class="status next"><i></i><span data-i18n="st.next">A seguir</span></span>
+      </div>
+      <div class="platform">
+        <h3 data-i18n="plat.winT">Windows e macOS</h3>
+        <p data-i18n="plat.winD">O app é feito em Tauri e Rust, então o caminho existe. Ainda não foi testado.</p>
+        <span class="status later"><i></i><span data-i18n="st.planned">Planejado</span></span>
+      </div>
+      <div class="platform">
+        <h3 data-i18n="plat.notesT">Destaques, notas e leitura em voz alta</h3>
+        <p data-i18n="plat.notesD">Só depois que a sincronização estiver sólida.</p>
+        <span class="status later"><i></i><span data-i18n="st.later">Depois</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ Fecho -->
+<div class="band">
+  <section class="closing">
+    <div class="wrap closing-inner">
+      <svg class="mark-lg" viewBox="170 190 684 690" aria-hidden="true"><use href="#mark" /></svg>
+      <div>
+        <h2 data-i18n="end.title">A página vai com você.</h2>
+        <p data-i18n="end.lead">Acompanhe o desenvolvimento, leia o código e teste a versão inicial no Linux e no Android.</p>
+      </div>
+      <a class="btn btn-paper" href="https://github.com/Caspiom/bookferry">
+        <svg aria-hidden="true"><use href="#i-code" /></svg><span data-i18n="end.cta">Ver no GitHub</span>
+      </a>
+    </div>
+  </section>
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <span>© 2026 Bookferry</span>
+      <span data-i18n="end.credits">Textos de exemplo: <i>Dom Casmurro</i>, Machado de Assis (1899), domínio público. Tipografia: Literata, <a href="fonts/OFL.txt">SIL OFL 1.1</a>.</span>
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ==================================================== Idiomas
+   * O português está escrito no HTML (é o que buscadores e quem abre sem JS veem).
+   * O inglês fica em EN. Cada elemento traduzível tem data-i18n="chave" (conteúdo, pode ter
+   * marcação inline) ou data-i18n-aria="chave" (aria-label). Ao mudar um texto em PT no HTML,
+   * atualize a mesma chave aqui.
+   */
+  const EN = {
+    'meta.description': 'A book and comic reader that uses your PC as the server. Close the book on your computer and open it on your phone on the same page, over your home network, with no account and no third-party cloud.',
+    'nav.home': 'Bookferry, home',
+    'nav.how': 'How it works',
+    'nav.reading': 'Reading',
+    'nav.privacy': 'Privacy',
+    'nav.platforms': 'Platforms',
+    'nav.lang': 'Language',
+    'nav.code': 'Code',
+    'nav.codeAria': 'Code on GitHub',
+    'hero.eyebrow': 'Book and comic reader · PC and Android',
+    'hero.title': 'Close the book on your computer. Open it on your phone <em>on the same page.</em>',
+    'hero.lead': 'Bookferry keeps your library on <strong>your</strong> PC and carries the spot where you stopped to your phone over your home network. No account, no subscription, no third-party cloud.',
+    'hero.cta2': 'Linux and Android',
+    'demo.aria': 'Demo of syncing between PC and phone',
+    'demo.labelPc': 'your PC',
+    'demo.labelPhone': 'phone',
+    'demo.prevPc': 'Previous page on PC',
+    'demo.nextPc': 'Next page on PC',
+    'demo.prevPhone': 'Previous page on phone',
+    'demo.nextPhone': 'Next page on phone',
+    'demo.immersive': 'Show or hide the phone controls',
+    'demo.hint': '<b>Try it:</b> tap the right edge of either screen to turn the page.',
+    'how.title': 'Your PC is the server. Your phone is the pocket reader.',
+    'how.lead': 'There is no server of ours in the middle. The desktop app has the server built in, and your phone talks to it directly.',
+    'tree.root': '~/Books',
+    'tree.author': 'Herman Melville',
+    'tree.b1': 'Moby-Dick',
+    'tree.b2': 'Bartleby',
+    'tree.comics': 'Comics',
+    'how.s1t': 'Pick your books folder',
+    'how.s1d': 'On your computer, point to the folder where your EPUB, PDF and CBZ files live. Bookferry starts the local server and builds the library, subfolders included.',
+    'how.expires': 'expires in',
+    'how.pinned': 'pinned certificate',
+    'how.s2t': 'Pair with a QR code',
+    'how.s2d': 'On your phone, scan the QR code shown in the PC’s Settings. No account, no password: the phone stores your computer’s certificate and only talks to it.',
+    'how.closedPc': 'Closed on PC',
+    'how.openedPhone': 'Opened on phone',
+    'how.p50': 'p. 50',
+    'how.s3t': 'Read wherever you are',
+    'how.s3d': 'Download a book to your phone whenever you like. Every page you turn goes to the other device, and whoever opens the book next picks up from there.',
+    'read.title': 'A real reader, for books and comics.',
+    'read.lead': 'EPUB with text that fits the screen, PDF page by page, and comics with two-page spreads and right-to-left reading for manga.',
+    'read.formats': 'Formats',
+    'read.soon': 'outlined ones are coming next',
+    'read.f1t': 'Per-book Aa panel',
+    'read.f1d': 'Font, size, margins and theme are saved for each book, with presets to switch quickly.',
+    'read.f2t': 'Light, dark and sepia',
+    'read.f2d': 'Themes made for reading at night without lighting up the whole room.',
+    'read.f3t': 'Three tap zones',
+    'read.f3d': 'The left 30% of the screen goes back, the middle 40% shows the controls, the right 30% goes forward. On Android, the volume keys turn pages too.',
+    'read.f4t': 'Immersive mode',
+    'read.f4d': 'Full screen with no bars, plus keyboard shortcuts on the computer.',
+    'read.f5t': 'Missing covers',
+    'read.f5d': 'Finds the cover on Open Library by the book’s title, or uses an image you pick.',
+    'read.f6t': 'Exact position',
+    'read.f6d': 'In EPUB the position is an <code>epubcfi</code>, not a percentage. In PDF and CBZ, it is the page number.',
+    'shelf.aria': 'Library example',
+    'shelf.continue': 'Continue reading',
+    'shelf.example': 'example',
+    'shelf.c0': 'Moby-Dick',
+    'shelf.c0author': 'Herman Melville',
+    'shelf.c0when': '· on phone 12 min ago',
+    'shelf.cta': 'Continue',
+    'shelf.library': 'Library',
+    'shelf.count': '4 of 212 books',
+    'shelf.b1': 'Pride and Prejudice',
+    'shelf.b1i': 'P',
+    'shelf.new': 'New',
+    'shelf.comics': '· Comics',
+    'shelf.b3': 'Frankenstein',
+    'shelf.b3i': 'F',
+    'shelf.done': 'Finished',
+    'shelf.b4': 'The Odyssey',
+    'shelf.b4i': 'T',
+    'priv.eyebrow': 'Privacy and sync',
+    'priv.title': 'Your books never leave home.',
+    'priv.lead': 'Your library and database stay on your computer. The phone finds the PC on your Wi‑Fi and talks to it over an encrypted connection. Nobody but you knows what you are reading.',
+    'priv.topoAria': 'The phone connects to the PC over your home Wi-Fi with an encrypted connection. An optional relay for use away from home is coming next.',
+    'priv.phone': 'Phone',
+    'priv.phoneNote': 'downloaded books<br />change queue',
+    'priv.link': 'Home Wi‑Fi<br />TLS · mDNS',
+    'priv.pc': 'Your PC',
+    'priv.pcNote': 'library<br />server + SQLite',
+    'priv.relay': '<b>Away from home:</b> an optional relay that only forwards end-to-end encrypted bytes. It stores and reads nothing.',
+    'priv.soon': 'next',
+    'priv.limit': '<b>The cost of not depending on a cloud:</b> with the PC turned off, the phone can’t sync or download new books. Books already on it keep opening normally.',
+    'priv.f1t': 'Reading offline? That’s fine.',
+    'priv.f1d': 'On the bus or on a plane, every page you turn waits in a queue on the phone. When the PC shows up on the network, the queue goes to it on its own.',
+    'priv.f2t': 'When you read on both devices',
+    'priv.f2d': 'If the other device has a newer position that is behind yours, Bookferry asks before taking you back.',
+    'priv.resumeAria': 'Example of the resume prompt',
+    'priv.resumeT': 'Pick up where you left off?',
+    'priv.resumeD': 'On the PC you stopped at p. 42, 5 min ago. On this phone you are at p. 50.',
+    'priv.stay': 'Stay here',
+    'priv.go': 'Continue there',
+    'priv.f3t': 'No account to create',
+    'priv.f3d': 'Pairing is the QR code and nothing else. To remove a device, revoke it in the PC’s Settings.',
+    'plat.title': 'Where it runs today, and what comes next.',
+    'plat.lead': 'Bookferry is at its first version. Here is the plain list.',
+    'plat.linux': 'Desktop app with a built-in server. Includes a <code>NixOS</code> module.',
+    'plat.android': 'Reader and sync client, with on-demand book downloads.',
+    'plat.relayT': 'Reading away from home',
+    'plat.relayD': 'A stateless, end-to-end encrypted relay to sync when you are away from your home network.',
+    'plat.fmtT': 'More formats',
+    'plat.fmtD': '<code>CBR</code>, <code>CB7</code>, <code>MOBI</code>, <code>AZW3</code> and <code>FB2</code>, comic series and a synced “Read next” list.',
+    'plat.winT': 'Windows and macOS',
+    'plat.winD': 'The app is built with Tauri and Rust, so the path is there. It has not been tested yet.',
+    'plat.notesT': 'Highlights, notes and read-aloud',
+    'plat.notesD': 'Only once sync is solid.',
+    'st.early': 'Early version',
+    'st.next': 'Next',
+    'st.planned': 'Planned',
+    'st.later': 'Later',
+    'end.title': 'Your page travels with you.',
+    'end.lead': 'Follow development, read the code and try the early version on Linux and Android.',
+    'end.cta': 'View on GitHub',
+    'end.credits': 'Sample text: <i>Moby-Dick</i>, Herman Melville (1851), public domain. Typeface: Literata, <a href="fonts/OFL.txt">SIL OFL 1.1</a>.',
+  };
+
+  // Livro da demonstração em cada idioma (textos em domínio público)
+  const DEMO = {
+    pt: {
+      title: 'Dom Casmurro',
+      byline: 'Machado de Assis · EPUB',
+      total: 256,
+      first: 9,
+      pages: [
+        { ch: 'I · Do título', short: 'Capítulo I', text: 'Uma noite destas, vindo da cidade para o Engenho Novo, encontrei no trem da Central um rapaz aqui do bairro, que eu conheço de vista e de chapéu. Cumprimentou-me, sentou-se ao pé de mim, falou da lua e dos ministros, e acabou recitando-me versos.' },
+        { ch: 'I · Do título', short: 'Capítulo I', text: 'A viagem era curta, e os versos pode ser que não fossem inteiramente maus. Sucedeu, porém, que, como eu estava cansado, fechei os olhos três ou quatro vezes; tanto bastou para que ele interrompesse a leitura e metesse os versos no bolso.' },
+        { ch: 'I · Do título', short: 'Capítulo I', text: '— Continue, disse eu acordando. — Já acabei, murmurou ele. — São muito bonitos. Vi-lhe fazer um gesto para tirá-los outra vez do bolso, mas não passou do gesto; estava amuado.' },
+        { ch: 'I · Do título', short: 'Capítulo I', text: 'No dia seguinte entrou a dizer de mim nomes feios, e acabou alcunhando-me Dom Casmurro. Os vizinhos, que não gostam dos meus hábitos reclusos e calados, deram curso à alcunha, que afinal pegou.' },
+        { ch: 'II · Do livro', short: 'Capítulo II', text: 'Agora que expliquei o título, passo a escrever o livro. Antes disso, porém, digamos os motivos que me põem a pena na mão.' },
+      ],
+      page: (p, t) => `pág. ${p} de ${t}`,
+      pageShort: (p) => `pág. ${p}`,
+      online: 'Conectado',
+      syncing: 'Sincronizando',
+      pc: 'PC',
+      phone: 'celular',
+      updated: (who) => `${who} atualizado`,
+      inSync: 'os dois aparelhos em dia',
+    },
+    en: {
+      title: 'Moby-Dick',
+      byline: 'Herman Melville · EPUB',
+      total: 635,
+      first: 7,
+      pages: [
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'Call me Ishmael. Some years ago—never mind how long precisely—having little or no money in my purse, and nothing particular to interest me on shore, I thought I would sail about a little and see the watery part of the world.' },
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'It is a way I have of driving off the spleen, and regulating the circulation. Whenever I find myself growing grim about the mouth; whenever it is a damp, drizzly November in my soul; … then, I account it high time to get to sea as soon as I can.' },
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'This is my substitute for pistol and ball. With a philosophical flourish Cato throws himself upon his sword; I quietly take to the ship. There is nothing surprising in this.' },
+        { ch: '1 · Loomings', short: 'Chapter 1', text: 'There now is your insular city of the Manhattoes, belted round by wharves as Indian isles by coral reefs—commerce surrounds it with her surf.' },
+        { ch: '2 · The Carpet-Bag', short: 'Chapter 2', text: 'I stuffed a shirt or two into my old carpet-bag, tucked it under my arm, and started for Cape Horn and the Pacific.' },
+      ],
+      page: (p, t) => `p. ${p} of ${t}`,
+      pageShort: (p) => `p. ${p}`,
+      online: 'Connected',
+      syncing: 'Syncing',
+      pc: 'PC',
+      phone: 'phone',
+      updated: (who) => `${who} updated`,
+      inSync: 'both devices in sync',
+    },
+  };
+
+  const store = {
+    get() { try { return localStorage.getItem('bookferry-lang'); } catch { return null; } },
+    set(v) { try { localStorage.setItem('bookferry-lang', v); } catch { /* sem armazenamento */ } },
+  };
+
+  const textNodes = Array.from(document.querySelectorAll('[data-i18n]'));
+  const ariaNodes = Array.from(document.querySelectorAll('[data-i18n-aria]'));
+  const metaDesc = document.querySelector('meta[name="description"]');
+  const PT = { 'meta.description': metaDesc ? metaDesc.content : '' };
+  textNodes.forEach((el) => { PT[el.dataset.i18n] = el.innerHTML; });
+  ariaNodes.forEach((el) => { PT[el.dataset.i18nAria] = el.getAttribute('aria-label'); });
+
+  let lang = 'pt';
+
+  function applyLang(next, opts = {}) {
+    lang = next === 'en' ? 'en' : 'pt';
+    const dict = lang === 'en' ? EN : PT;
+    textNodes.forEach((el) => {
+      const v = dict[el.dataset.i18n];
+      if (v != null) el.innerHTML = v;
+    });
+    ariaNodes.forEach((el) => {
+      const v = dict[el.dataset.i18nAria];
+      if (v != null) el.setAttribute('aria-label', v);
+    });
+    if (metaDesc) metaDesc.content = dict['meta.description'];
+    document.documentElement.lang = lang === 'en' ? 'en' : 'pt-BR';
+    document.querySelectorAll('[data-set-lang]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.setLang === lang));
+    });
+    demo.setLang(lang);
+    if (opts.remember) {
+      store.set(lang);
+      try {
+        const url = new URL(location.href);
+        if (lang === 'en') url.searchParams.set('lang', 'en');
+        else url.searchParams.delete('lang');
+        history.replaceState(null, '', url);
+      } catch { /* sem history (ex.: sandbox) */ }
+    }
+  }
+
+  function initialLang() {
+    try {
+      const q = new URLSearchParams(location.search).get('lang');
+      if (q === 'en' || q === 'pt') return q;
+    } catch { /* ignora */ }
+    const saved = store.get();
+    if (saved === 'en' || saved === 'pt') return saved;
+    const langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'pt'];
+    return String(langs[0]).toLowerCase().startsWith('pt') ? 'pt' : 'en';
+  }
+
+  /* ==================================================== Demonstração */
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const stage = document.getElementById('stage');
+  const ferry = document.getElementById('ferry');
+  const log = document.getElementById('log');
+  const dev = {
+    pc: document.getElementById('dev-pc'),
+    phone: document.getElementById('dev-phone'),
+  };
+  const q = (root, sel) => root.querySelector(sel);
+  const qa = (root, sel) => Array.from(root.querySelectorAll(sel));
+
+  const demo = (() => {
+    let book = DEMO.pt;
+    const page = { pc: book.first, phone: book.first };
+    let timer = 0;
+    let docked = 'pc';
+    const last = () => book.first + book.pages.length - 1;
+    const cfi = (p) => {
+      const i = p - book.first;
+      return `epubcfi(/6/${i < 4 ? 4 : 6}!/4/${2 + 2 * (i % 4)}/1:0)`;
+    };
+
+    function render(which, animate) {
+      const root = dev[which];
+      const p = page[which];
+      const data = book.pages[p - book.first];
+      const prose = q(root, '[data-prose]');
+      const apply = () => {
+        prose.textContent = data.text;
+        q(root, '[data-chapter]').textContent = data.ch;
+        const short = q(root, '[data-chapter-short]');
+        if (short) short.textContent = data.short;
+        prose.classList.remove('is-turning');
+      };
+      if (animate && !reduced.matches) {
+        prose.classList.add('is-turning');
+        setTimeout(apply, 170);
+      } else {
+        apply();
+      }
+      q(root, '[data-track]').style.width = ((p / book.total) * 100).toFixed(1) + '%';
+      const full = q(root, '[data-page]');
+      if (full) full.textContent = book.page(p, book.total);
+      const short = q(root, '[data-page-short]');
+      if (short) short.textContent = `${p}/${book.total}`;
+      qa(root, '[data-turn]').forEach((b) => {
+        const d = Number(b.dataset.turn);
+        b.disabled = (d < 0 && p <= book.first) || (d > 0 && p >= last());
+      });
+    }
+
+    let pillState = 'online';
+    function setPills(state) {
+      pillState = state;
+      qa(stage, '[data-pill]').forEach((pill) => {
+        pill.classList.toggle('is-syncing', state === 'syncing');
+        q(pill, '[data-pill-text]').textContent = state === 'syncing' ? book.syncing : book.online;
+      });
+    }
+
+    // Centro horizontal de cada aparelho, relativo ao palco, menos metade da balsa
+    function dockX(which) {
+      const s = stage.getBoundingClientRect();
+      const d = dev[which].getBoundingClientRect();
+      return d.left - s.left + d.width / 2 - ferry.offsetWidth / 2;
+    }
+    function dock(which, instant) {
+      if (instant) ferry.style.transition = 'none';
+      ferry.style.setProperty('--x', dockX(which) + 'px');
+      if (instant) { void ferry.offsetWidth; ferry.style.transition = ''; }
+    }
+
+    function turn(from, delta) {
+      const to = from === 'pc' ? 'phone' : 'pc';
+      const next = Math.min(last(), Math.max(book.first, page[from] + delta));
+      if (next === page[from]) return;
+      page[from] = next;
+      render(from, true);
+
+      clearTimeout(timer);
+      setPills('syncing');
+      // a balsa parte do aparelho onde a página virou
+      if (docked !== from) dock(from, true);
+      ferry.classList.toggle('is-flipped', from === 'phone');
+      requestAnimationFrame(() => dock(to, false));
+      docked = to;
+
+      log.textContent = `${book[from]} → ${book[to]} · ${book.pageShort(next)} · ${cfi(next)}`;
+      timer = setTimeout(() => {
+        page[to] = next;
+        render(to, true);
+        setPills('online');
+        log.textContent = `${book.pageShort(next)} · ${cfi(next)} · ${book.updated(book[to])}`;
+      }, reduced.matches ? 150 : 1100);
+    }
+
+    function setLang(l) {
+      clearTimeout(timer);
+      book = DEMO[l];
+      page.pc = page.phone = book.first;
+      qa(stage, '[data-book-title]').forEach((el) => { el.textContent = book.title; });
+      qa(stage, '[data-book-byline]').forEach((el) => { el.textContent = book.byline; });
+      render('pc', false);
+      render('phone', false);
+      setPills('online');
+      log.textContent = `${book.pageShort(book.first)} · ${cfi(book.first)} · ${book.inSync}`;
+      if (docked !== 'pc') { docked = 'pc'; ferry.classList.remove('is-flipped'); }
+      dock('pc', true);
+    }
+
+    stage.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.disabled) return;
+      const which = btn.closest('#dev-pc') ? 'pc' : 'phone';
+      if (btn.dataset.turn) turn(which, Number(btn.dataset.turn));
+      if (btn.hasAttribute('data-immersive')) dev.phone.classList.toggle('is-immersive');
+    });
+    stage.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      const inPhone = e.target.closest && e.target.closest('#dev-phone');
+      turn(inPhone ? 'phone' : 'pc', e.key === 'ArrowRight' ? 1 : -1);
+    });
+    window.addEventListener('resize', () => dock(docked, true));
+
+    return { setLang };
+  })();
+
+  /* ==================================================== Início */
+  document.querySelectorAll('[data-set-lang]').forEach((b) => {
+    b.addEventListener('click', () => {
+      if (b.dataset.setLang !== lang) applyLang(b.dataset.setLang, { remember: true });
+    });
+  });
+  applyLang(initialLang());
+  document.documentElement.classList.remove('lang-wait');
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const clock = q(dev.phone, '[data-clock]');
+  const tick = () => { const d = new Date(); clock.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  tick();
+  setInterval(tick, 30000);
+
+  /* ---------------------------------------------------- Barra fixa */
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('is-scrolled', window.scrollY > 8);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* ---------------------------------------------------- QR ilustrativo (não codifica nada) */
+  const N = 25;
+  let seed = 1847;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const finder = (x, y) => {
+    const inBox = (ox, oy) => x >= ox && x < ox + 7 && y >= oy && y < oy + 7;
+    for (const [ox, oy] of [[0, 0], [N - 7, 0], [0, N - 7]]) {
+      if (inBox(ox, oy)) {
+        const dx = x - ox, dy = y - oy;
+        const ring = Math.min(dx, dy, 6 - dx, 6 - dy);
+        return ring === 0 || ring >= 2 ? 1 : 0;
+      }
+      if (x >= ox - 1 && x <= ox + 7 && y >= oy - 1 && y <= oy + 7) return 0;
+    }
+    return -1;
+  };
+  let rects = '';
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const f = finder(x, y);
+      const on = f === -1 ? rnd() > 0.52 : f === 1;
+      if (on) rects += `<rect x="${x}" y="${y}" width="1.02" height="1.02"/>`;
+    }
+  }
+  document.getElementById('qr').innerHTML = `<svg viewBox="0 0 ${N} ${N}" shape-rendering="crispEdges"><g fill="#1b2a3a">${rects}</g></svg>`;
+
+  let secs = 292;
+  const qrTimer = document.getElementById('qr-timer');
+  setInterval(() => {
+    secs = secs <= 0 ? 300 : secs - 1;
+    qrTimer.textContent = `${Math.floor(secs / 60)}:${pad(secs % 60)}`;
+  }, 1000);
+})();
+</script>
+</body>
+</html>
