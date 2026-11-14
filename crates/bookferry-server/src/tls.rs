@@ -7,8 +7,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, Serve
 use rustls::{
     ClientConfig, DigitallySignedStruct, Error as TlsError, ServerConfig, SignatureScheme,
 };
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -119,6 +118,8 @@ pub fn load_or_generate_tls(
 fn write_private_key_0600(path: &Path, bytes: &[u8]) -> Result<(), ServerError> {
     #[cfg(unix)]
     {
+        use std::fs::OpenOptions;
+        use std::io::Write;
         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
         let mut f = OpenOptions::new()
             .create(true)

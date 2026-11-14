@@ -121,10 +121,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
-      - name: NDK
+      - name: NDK (o SDK ja vem no runner)
         run: |
-          sdkmanager "ndk;${NDK_VERSION}"
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses > /dev/null || true
+          "$sdk" "ndk;${NDK_VERSION}"
           echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -153,7 +154,8 @@ jobs:
       - name: Conferir assinatura e reunir
         run: |
           apk=$(ls app/src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk | head -1)
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$apk"
+          signer="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          "$signer" verify --print-certs "$apk"
           mkdir dist
           cp "$apk" "dist/Bookferry_${{ needs.versao.outputs.versao }}_android-arm64.apk"
           ls -la dist
