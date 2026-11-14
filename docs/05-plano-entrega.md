@@ -1,7 +1,7 @@
 # Plano de entrega: Windows, macOS, Linux e Android
 
-Estado: **plano, nada construído**. Escrito em 14/11/2026. Decisões em aberto estão na seção 2 e
-bloqueiam a Fase 1 em diante. Preços e regras de lojas/assinatura foram conferidos na documentação
+Estado: **plano, nada construído**. Escrito em 14/11/2026. Respostas do Lucas do mesmo dia estão na
+seção 2; o que ainda falta decidir bloqueia as fases indicadas. Preços e regras de lojas/assinatura foram conferidos na documentação
 em 11/2026: reconferir antes de pagar qualquer coisa.
 
 ## 1. Ponto de partida (verificado no repositório)
@@ -24,12 +24,31 @@ na rede em cada SO. O Android não abre porta nenhuma.
 | ID | Decisão | Por que importa | Recomendação |
 |---|---|---|---|
 | D1 | **Modelo de venda e licença**: (a) código fechado, licença/chave por compra; (b) código aberto, cobra pela conveniência (binários, lojas, suporte); (c) só pelas lojas | muda o repo (público ou privado), a licença no `Cargo.toml`, se Flathub/AUR são possíveis e o que o botão "Código" do site aponta | (a) para começar: é o que "landing paga" sugere. Trocar o campo `license` para proprietário |
-| D2 | **Visibilidade do repo do app** | repo público: CI grátis, inclusive ARM; privado: ~US$ 12/mês de Actions (cerca de 193 min de macOS) | privado + macOS só em tag de release |
+| D2 | **Visibilidade do repo do app** (resolvido por D1: público, após auditoria) | repo público: CI grátis, inclusive ARM; privado: ~US$ 12/mês de Actions (cerca de 193 min de macOS) | privado + macOS só em tag de release |
 | D3 | **Canais**: site direto, lojas (Play, Microsoft Store, Mac App Store) ou os dois | lojas dão assinatura e atualização, mas têm taxa, revisão e regras; Play exige teste fechado com 12 pessoas por 14 dias em conta pessoal nova | site direto primeiro; Play depois |
 | D4 | **Aparelhos de teste**: há Windows? há Mac? | sem Mac não dá para testar o app no macOS; sem Windows, só teste em CI | decidir antes de vender para cada SO |
 | D5 | **Orçamento de assinatura** | Windows: certificado OV ~US$ 150–300/ano, ou Azure Artifact Signing (~US$ 10/mês, mas pessoa física só nos EUA/Canadá); macOS: Apple Developer US$ 99/ano; Android: US$ 25 uma vez (Play) | macOS e Windows assinados só quando for cobrar; antes disso, avisar no site |
 | D6 | **Cobrança**: quem processa pagamento e entrega a licença | landing diz "[a definir]"; precisa de checkout, recibo, reembolso, imposto | pesquisar na hora (Brasil: meio de pagamento e nota fiscal); não é técnico |
 | D7 | **Android x86_64/armv7**: incluir? | hoje só arm64; cobre quase todos os celulares atuais, mas exclui aparelhos antigos de 32 bits e emuladores | só arm64 no início; adicionar `x86_64` se houver demanda |
+
+### 2.1 Respostas já dadas (14/11/2026)
+
+- **D1 = código aberto, cobrando pela conveniência** (binários prontos, lojas, suporte).
+  Consequências: o repo do app pode e deve ficar **público** (D2 resolvido: CI grátis em todos os SOs,
+  inclusive macOS e ARM); AUR e Flathub passam a ser possíveis; o botão "Código" do site passa a
+  funcionar. **Antes de publicar:** auditar o histórico do git por segredos, caminhos pessoais e
+  arquivos que não devem sair; decidir a licença (hoje `MIT OR Apache-2.0`: permite que terceiros
+  revendam o binário; uma licença copyleft como GPL/AGPL-3.0 dificulta isso. Decisão **D1b**, em aberto).
+  Respeitar as licenças das dependências (nada AGPL copiado; MuPDF/UnRAR continuam fora).
+- **D4 = há um PC Windows próprio; macOS só por um amigo testando.** Windows tem teste real; macOS tem
+  teste esporádico e dependente de terceiro: macOS entra por último e só como "beta" até haver retorno.
+- **Prioridade = Linux + Android primeiro** (Fases 2 e 3), depois Windows, depois macOS.
+
+### 2.2 Ainda em aberto
+
+D1b (licença: permissiva ou copyleft), D3 (canais), D5 (orçamento de assinatura), D6 (cobrança), D7 (ABIs).
+Com código aberto, D6 deixa de ser "vender licença" e vira "vender o binário/loja/apoio": o checkout
+precisa refletir isso, e o texto da landing também.
 
 ## 3. Plano por plataforma
 
@@ -104,7 +123,7 @@ na rede em cada SO. O Android não abre porta nenhuma.
 | Fase | Entrega | Pronto quando | Depende de |
 |---|---|---|---|
 | 0 | Decisões D1–D7 | respostas anotadas aqui | Lucas |
-| 1 | **CI base** em branch separada: compilar + `cargo test` + `node --test` em Linux, Windows e macOS, sem instalador | os 3 SOs verdes (corrigindo o que o Windows e o macOS acharem) | D2 |
+| 1 | **Auditoria do repo para torná-lo público** (segredos, histórico, licença D1b) e **CI base** em branch separada: compilar + `cargo test` + `node --test` em Linux, Windows e macOS, sem instalador | repo auditado; os 3 SOs verdes (corrigindo o que o Windows e o macOS acharem) | D1b |
 | 2 | **Linux**: `.deb`, `.rpm`, AppImage; teste em containers das 4 distros | instala e abre em Ubuntu 22.04/24.04, Debian 12 e Fedora | Fase 1 |
 | 3 | **Android release**: keystore, APK assinado, regra de `versionCode` | `adb install` do APK de release e pareamento com o desktop | D3 |
 | 4 | **Windows**: NSIS, regra de firewall, smoke test | instala, abre, o celular pareia | Fase 1, D4, D5 |
