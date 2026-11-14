@@ -4,7 +4,11 @@ use crate::db::{
 };
 use crate::error::{ApiError, ErrorBody, HEADER_BOOKFERRY_API};
 use crate::library::{resolve_safe_vault_file, scan_vault_dir};
-use axum::body::Body;
+use crate::meta::{
+    normalize_display_title, sniff_cover_mime, BookMetaRecord, CoverSource, MetaOutcome, NewCover,
+    COVER_MAX_BYTES,
+};
+use axum::body::{Body, Bytes};
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{
     DefaultBodyLimit, FromRequest, FromRequestParts, Path as AxumPath, Query, Request, State,
@@ -113,6 +117,19 @@ pub fn build_router(state: Arc<AppState>, max_json_body_bytes: usize) -> Router 
         .route("/library/rescan", post(handle_rescan_library))
         .route("/books", get(handle_list_books))
         .route("/books/:id/file", get(handle_get_book_file))
+        .route("/books/:id/meta", put(handle_put_display_title))
+        .route(
+            "/books/:id/continue-hidden",
+            put(handle_put_continue_hidden),
+        )
+        .route(
+            "/books/:id/cover",
+            get(handle_get_cover)
+                .put(handle_put_cover)
+                .delete(handle_delete_cover)
+                .layer(DefaultBodyLimit::max(COVER_MAX_BYTES + 1024)),
+        )
+        .route("/books/without-cover", get(handle_list_without_cover))
         .route(
             "/books/:id/position",
             put(handle_put_position).get(handle_get_position),
@@ -482,6 +499,189 @@ async fn handle_list_books(
 ) -> Result<Json<BooksListResponse>, ApiError> {
     let books = state.db.list_books_with_positions()?;
     Ok(Json(BooksListResponse { books }))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DisplayTitleRequest {
+    /// `null` ou texto vazio volta ao titulo original. O campo e obrigatorio: `{}` e rejeitado em
+    /// vez de apagar o nome sem querer (`deserialize_with` desliga o default de `Option`).
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub display_title: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ContinueHiddenRequest {
+    pub hidden: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BookMetaResponse {
+    pub applied: bool,
+    pub meta: BookMetaRecord,
+}
+
+#[derive(Deserialize, Debug, Default)]
+pub struct CoverQuery {
+    pub source: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WithoutCoverResponse {
+    pub book_ids: Vec<String>,
+}
+
+fn meta_response(
+    state: &AppState,
+    outcome: Option<MetaOutcome>,
+) -> Result<Json<BookMetaResponse>, ApiError> {
+    let outcome =
+        outcome.ok_or_else(|| ApiError::not_found("book_not_found", "Livro nao encontrado"))?;
+    if let Some(ev) = outcome.sse_event {
+        let _ = state.sse_tx.send(ev);
+    }
+    Ok(Json(BookMetaResponse {
+        applied: outcome.applied,
+        meta: outcome.meta,
+    }))
+}
+
+async fn handle_put_display_title(
+    auth: AuthenticatedDevice,
+    State(state): State<Arc<AppState>>,
+    AxumPath(raw_id): AxumPath<String>,
+    ApiJson(payload): ApiJson<DisplayTitleRequest>,
+) -> Result<Json<BookMetaResponse>, ApiError> {
+    let book_id = BookId::parse(&raw_id)?;
+    let title = normalize_display_title(payload.display_title.as_deref())
+        .map_err(|e| ApiError::unprocessable(e.code(), e.message()))?;
+    let outcome = state.db.set_display_title(
+        &book_id,
+        title,
+        &auth.id,
+        state.clock.now_ms(),
+        state.sse_replay_limit,
+    )?;
+    meta_response(&state, outcome)
+}
+
+async fn handle_put_continue_hidden(
+    auth: AuthenticatedDevice,
+    State(state): State<Arc<AppState>>,
+    AxumPath(raw_id): AxumPath<String>,
+    ApiJson(payload): ApiJson<ContinueHiddenRequest>,
+) -> Result<Json<BookMetaResponse>, ApiError> {
+    let book_id = BookId::parse(&raw_id)?;
+    let outcome = state.db.set_continue_hidden(
+        &book_id,
+        payload.hidden,
+        &auth.id,
+        state.clock.now_ms(),
+        state.sse_replay_limit,
+    )?;
+    meta_response(&state, outcome)
+}
+
+async fn handle_get_cover(
+    _auth: AuthenticatedDevice,
+    State(state): State<Arc<AppState>>,
+    AxumPath(raw_id): AxumPath<String>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let book_id = BookId::parse(&raw_id)?;
+    let cover = state
+        .db
+        .get_cover(&book_id)?
+        .ok_or_else(|| ApiError::not_found("cover_not_found", "Livro sem capa"))?;
+    let etag = format!("\"cover-{}\"", cover.version);
+    let not_modified = headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v == etag);
+
+    let mut resp = if not_modified {
+        Response::builder()
+            .status(StatusCode::NOT_MODIFIED)
+            .body(Body::empty())
+    } else {
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, cover.mime)
+            .header(CONTENT_LENGTH, cover.data.len())
+            .body(Body::from(cover.data))
+    }
+    .map_err(|_| ApiError::internal("Falha ao montar resposta da capa"))?;
+    let h = resp.headers_mut();
+    if let Ok(v) = HeaderValue::from_str(&etag) {
+        h.insert(ETAG, v);
+    }
+    h.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-cache"));
+    h.insert(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    Ok(resp)
+}
+
+async fn handle_put_cover(
+    auth: AuthenticatedDevice,
+    State(state): State<Arc<AppState>>,
+    AxumPath(raw_id): AxumPath<String>,
+    Query(query): Query<CoverQuery>,
+    body: Bytes,
+) -> Result<Json<BookMetaResponse>, ApiError> {
+    let book_id = BookId::parse(&raw_id)?;
+    let source = match query.source.as_deref() {
+        None => CoverSource::Custom,
+        Some(raw) => CoverSource::parse(raw).ok_or_else(|| {
+            ApiError::bad_request(
+                "invalid_cover_source",
+                "source deve ser embedded, custom ou web",
+            )
+        })?,
+    };
+    let mime = sniff_cover_mime(&body).map_err(|e| {
+        let status = match e {
+            crate::meta::MetaValidationError::CoverTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            _ => StatusCode::UNPROCESSABLE_ENTITY,
+        };
+        ApiError::new(status, e.code(), e.message())
+    })?;
+    let outcome = state.db.put_cover(
+        &book_id,
+        NewCover {
+            source,
+            mime,
+            data: &body,
+        },
+        &auth.id,
+        state.clock.now_ms(),
+        state.sse_replay_limit,
+    )?;
+    meta_response(&state, outcome)
+}
+
+async fn handle_delete_cover(
+    auth: AuthenticatedDevice,
+    State(state): State<Arc<AppState>>,
+    AxumPath(raw_id): AxumPath<String>,
+) -> Result<Json<BookMetaResponse>, ApiError> {
+    let book_id = BookId::parse(&raw_id)?;
+    let outcome = state.db.delete_cover(
+        &book_id,
+        &auth.id,
+        state.clock.now_ms(),
+        state.sse_replay_limit,
+    )?;
+    meta_response(&state, outcome)
+}
+
+async fn handle_list_without_cover(
+    _auth: AuthenticatedDevice,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<WithoutCoverResponse>, ApiError> {
+    Ok(Json(WithoutCoverResponse {
+        book_ids: state.db.list_book_ids_without_cover()?,
+    }))
 }
 
 async fn handle_get_book_file(

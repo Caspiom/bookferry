@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 pub const DB_FILENAME: &str = "bookferry.db";
-pub const CURRENT_SCHEMA_VERSION: i32 = 1;
+pub const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 /// DDL completo da versao 1 do schema SQLite.
 pub const SCHEMA_V1_DDL: &str = r#"
@@ -87,6 +87,25 @@ CREATE TABLE IF NOT EXISTS sse_events (
 );
 "#;
 
+/// DDL da versao 2: metadados editaveis por livro (nome, capa, "Continuar lendo").
+pub const SCHEMA_V2_DDL: &str = r#"
+CREATE TABLE IF NOT EXISTS book_meta (
+    book_id               TEXT PRIMARY KEY NOT NULL REFERENCES books(book_id) ON DELETE CASCADE,
+    display_title         TEXT NULL,
+    cover_version         INTEGER NOT NULL DEFAULT 0,
+    cover_source          TEXT NULL CHECK (cover_source IN ('embedded', 'custom', 'web')),
+    hidden_continue_at_ms INTEGER NULL,
+    server_seq            INTEGER NOT NULL,
+    updated_at_ms         INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS book_covers (
+    book_id TEXT PRIMARY KEY NOT NULL REFERENCES books(book_id) ON DELETE CASCADE,
+    mime    TEXT NOT NULL,
+    data    BLOB NOT NULL
+);
+"#;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeviceSummary {
     pub id: String,
@@ -138,6 +157,16 @@ pub struct BookWithPosition {
     /// nome do arquivo nem caminho absoluto.
     #[serde(default)]
     pub folder: String,
+    /// Nome escolhido pelo usuario (substitui `title` na exibicao; `title` continua o original).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_title: Option<String>,
+    /// `0` = sem capa; senao serve de cache-buster para `GET /books/:id/cover?v=`.
+    #[serde(default)]
+    pub cover_version: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden_continue_at_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<PositionRecord>,
 }
@@ -222,7 +251,7 @@ impl Database {
         &self.path
     }
 
-    fn lock_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+    pub(crate) fn lock_conn(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.conn.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -395,9 +424,11 @@ impl Database {
                 b.book_id, b.partial_md5, b.title, b.format, b.size_bytes, b.mtime_ms,
                 p.device_id, p.hlc_canonical, p.hlc_wall_ms, p.hlc_logical, p.hlc_node,
                 p.locator, p.snippet, p.percent, p.server_seq, p.updated_at_ms,
-                b.rel_path
+                b.rel_path,
+                m.display_title, m.cover_version, m.cover_source, m.hidden_continue_at_ms
              FROM books b
              LEFT JOIN positions p ON b.book_id = p.book_id
+             LEFT JOIN book_meta m ON b.book_id = m.book_id
              ORDER BY b.title ASC, b.book_id ASC",
         )?;
 
@@ -431,6 +462,10 @@ impl Database {
                 size_bytes: row.get::<_, i64>(4)?.max(0) as u64,
                 mtime_ms: row.get::<_, i64>(5)?.max(0) as u64,
                 folder: folder_of(&row.get::<_, String>(16)?),
+                display_title: row.get(17)?,
+                cover_version: row.get::<_, Option<i64>>(18)?.unwrap_or(0).max(0) as u64,
+                cover_source: row.get(19)?,
+                hidden_continue_at_ms: row.get::<_, Option<i64>>(20)?.map(|v| v.max(0) as u64),
                 position,
             })
         })?;
@@ -807,6 +842,12 @@ fn run_migrations(conn: &mut Connection) -> Result<(), rusqlite::Error> {
     if version < 1 {
         let tx = conn.transaction()?;
         tx.execute_batch(SCHEMA_V1_DDL)?;
+        tx.pragma_update(None, "user_version", 1)?;
+        tx.commit()?;
+    }
+    if version < 2 {
+        let tx = conn.transaction()?;
+        tx.execute_batch(SCHEMA_V2_DDL)?;
         tx.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
         tx.commit()?;
     }
@@ -843,5 +884,41 @@ mod folder_tests {
             "hqs/DC/Swamp Thing"
         );
         assert_eq!(folder_of("a/b.epub"), "a");
+    }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+
+    #[test]
+    fn v1_database_upgrades_to_v2_keeping_data() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        {
+            let conn = Connection::open(dir.path().join(DB_FILENAME)).expect("v1 conn");
+            conn.execute_batch(SCHEMA_V1_DDL).expect("ddl v1");
+            conn.pragma_update(None, "user_version", 1).expect("v1");
+            conn.execute(
+                "INSERT INTO books (book_id, partial_md5, size_bytes, title, format, mtime_ms, rel_path, updated_at_ms)
+                 VALUES ('0123456789abcdef0123456789abcdef-9', 'x', 9, 'Antigo', 'pdf', 1, 'hqs/antigo.pdf', 1)",
+                [],
+            )
+            .expect("book v1");
+        }
+        let db = Database::open(dir.path()).expect("open migra v1 -> v2");
+        let books = db.list_books_with_positions().expect("list");
+        assert_eq!(books.len(), 1);
+        assert_eq!(books[0].title, "Antigo");
+        assert_eq!(books[0].folder, "hqs");
+        assert_eq!(books[0].display_title, None);
+        assert_eq!(books[0].cover_version, 0);
+        let version: i32 = db
+            .lock_conn()
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .expect("version");
+        assert_eq!(version, CURRENT_SCHEMA_VERSION);
+        // Abrir de novo (ja na v2) e idempotente.
+        drop(db);
+        Database::open(dir.path()).expect("reabrir v2");
     }
 }

@@ -4,15 +4,17 @@ pub mod db;
 pub mod error;
 pub mod library;
 pub mod mdns;
+pub mod meta;
 pub mod routes;
 pub mod tls;
 
 pub use crate::db::{BookWithPosition, DeviceSummary, SsePositionPayload};
 pub use crate::error::{ApiError, ErrorBody, ServerError, HEADER_BOOKFERRY_API};
+pub use crate::meta::{BookMetaRecord, CoverSource, SseBookMetaPayload, COVER_MAX_BYTES};
 pub use crate::routes::{
-    BooksListResponse, DevicesListResponse, GetPositionResponse, PairRequest, PairResponse,
-    PositionsListResponse, PutPositionResponse, RescanResponse, RevokeDeviceResponse,
-    StatusResponse,
+    BookMetaResponse, BooksListResponse, ContinueHiddenRequest, DevicesListResponse,
+    DisplayTitleRequest, GetPositionResponse, PairRequest, PairResponse, PositionsListResponse,
+    PutPositionResponse, RescanResponse, RevokeDeviceResponse, StatusResponse,
 };
 pub use crate::tls::{
     build_pinned_client_config, extract_spki_from_x509_der, PinnedServerCertVerifier,

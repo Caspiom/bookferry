@@ -1,10 +1,10 @@
 use axum::http::{HeaderMap, Method, Request, StatusCode};
 use bookferry_core::{ManualClock, PositionUpdate, API_VERSION, DEFAULT_MAX_FUTURE_DRIFT_MS};
 use bookferry_server::{
-    build_pinned_client_config, start, BooksListResponse, Config, DevicesListResponse, ErrorBody,
-    GetPositionResponse, PairResponse, PositionsListResponse, PutPositionResponse, RescanResponse,
-    RevokeDeviceResponse, SsePositionPayload, StatusResponse, CERT_DER_FILENAME,
-    HEADER_BOOKFERRY_API, KEY_DER_FILENAME,
+    build_pinned_client_config, start, BookMetaResponse, BooksListResponse, Config,
+    DevicesListResponse, ErrorBody, GetPositionResponse, PairResponse, PositionsListResponse,
+    PutPositionResponse, RescanResponse, RevokeDeviceResponse, SsePositionPayload, StatusResponse,
+    CERT_DER_FILENAME, HEADER_BOOKFERRY_API, KEY_DER_FILENAME,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
@@ -1374,4 +1374,295 @@ async fn books_expose_folder_and_ignore_dirs_without_supported_files() {
     let raw = serde_json::to_string(&resp).unwrap();
     assert!(!raw.contains(vault_dir.to_str().unwrap()));
     assert!(!raw.contains("vol1.cbz"));
+}
+
+// ============================================================================
+// Metadados por livro: nome, capa e "Continuar lendo" (sincronizados por SSE)
+// ============================================================================
+
+const TINY_PNG: [u8; 16] = [
+    0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, b'I', b'H', b'D', b'R',
+];
+
+#[tokio::test]
+async fn book_meta_title_cover_and_continue_hidden_over_http() {
+    let tmp = TempDir::new().unwrap();
+    let data_dir = tmp.path().join("data");
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+
+    let mut cfg = test_config(&data_dir, &vault_dir);
+    cfg.sse_keepalive_interval = Duration::from_millis(200);
+    let handle = start(cfg).await.unwrap();
+    let client = PinnedTestClient::new(
+        handle.local_addr(),
+        handle.cert_sha256(),
+        Some(handle.spki_sha256()),
+    );
+    let qr1 = handle.pairing_payload();
+    let (_, b1) = client.pair_device(&qr1.secret, "pc").await;
+    let pc: PairResponse = serde_json::from_slice(&b1).unwrap();
+    let qr2 = handle.rotate_pairing_secret().unwrap();
+    let (_, b2) = client.pair_device(&qr2.secret, "celular").await;
+    let phone: PairResponse = serde_json::from_slice(&b2).unwrap();
+
+    let (_, books): (_, BooksListResponse) = client
+        .request_json(Method::GET, "/books", Some(&pc.token), Vec::new())
+        .await;
+    let book_id = books.books[0].book_id.clone();
+    assert!(books.books.iter().all(|b| b.display_title.is_none()
+        && b.cover_version == 0
+        && b.hidden_continue_at_ms.is_none()));
+    let meta_uri = format!("/books/{book_id}/meta");
+    let cover_uri = format!("/books/{book_id}/cover");
+    let hidden_uri = format!("/books/{book_id}/continue-hidden");
+
+    // Sem token: 401 em todas as rotas novas.
+    for (m, uri) in [
+        (Method::PUT, meta_uri.as_str()),
+        (Method::PUT, hidden_uri.as_str()),
+        (Method::GET, cover_uri.as_str()),
+        (Method::PUT, cover_uri.as_str()),
+        (Method::DELETE, cover_uri.as_str()),
+    ] {
+        let (st, _, _) = client.request_raw(m, uri, None, &[], Vec::new()).await;
+        assert_eq!(st, StatusCode::UNAUTHORIZED, "{uri}");
+    }
+
+    // O celular escuta SSE; as escritas do PC chegam la, as do proprio celular nao voltam.
+    let sse = client.open_sse_stream(&phone.token, None).await;
+    let mut sse = SseStreamReader::new(sse);
+
+    // --- nome de exibicao ---
+    let body =
+        serde_json::to_vec(&serde_json::json!({ "display_title": "  Meu \n Nome " })).unwrap();
+    let (st, r): (_, BookMetaResponse) = client
+        .request_json(Method::PUT, &meta_uri, Some(&pc.token), body)
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    assert!(r.applied);
+    assert_eq!(r.meta.display_title.as_deref(), Some("Meu Nome"));
+    let ev = sse
+        .next_event(Duration::from_secs(3))
+        .await
+        .expect("evento book_meta");
+    assert_eq!(ev.event, "book_meta");
+    let payload: bookferry_server::SseBookMetaPayload = serde_json::from_str(&ev.data).unwrap();
+    assert_eq!(payload.book_id, book_id);
+    assert_eq!(payload.meta.display_title.as_deref(), Some("Meu Nome"));
+    assert_eq!(payload.origin_device_id, pc.device_id);
+
+    let long =
+        serde_json::to_vec(&serde_json::json!({ "display_title": "x".repeat(201) })).unwrap();
+    let (st, _, _) = client
+        .request_raw(Method::PUT, &meta_uri, Some(&pc.token), &[], long)
+        .await;
+    assert_eq!(st, StatusCode::UNPROCESSABLE_ENTITY);
+    let (st, _, _) = client
+        .request_raw(Method::PUT, &meta_uri, Some(&pc.token), &[], b"{}".to_vec())
+        .await;
+    assert!(st.is_client_error());
+
+    // --- capa ---
+    let (st, _, _) = client
+        .request_raw(Method::GET, &cover_uri, Some(&pc.token), &[], Vec::new())
+        .await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+
+    let put = |uri: String, token: String, bytes: Vec<u8>| {
+        let client = &client;
+        async move {
+            client
+                .request_raw(Method::PUT, &uri, Some(&token), &[], bytes)
+                .await
+        }
+    };
+    let (st, _, bytes) = put(
+        format!("{cover_uri}?source=embedded"),
+        pc.token.clone(),
+        TINY_PNG.to_vec(),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let emb: BookMetaResponse = serde_json::from_slice(&bytes).unwrap();
+    assert!(emb.applied && emb.meta.cover_version > 0);
+    assert_eq!(emb.meta.cover_source.as_deref(), Some("embedded"));
+
+    let (st, hdrs, bytes) = client
+        .request_raw(Method::GET, &cover_uri, Some(&phone.token), &[], Vec::new())
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(hdrs.get("content-type").unwrap(), "image/png");
+    assert_eq!(hdrs.get("x-content-type-options").unwrap(), "nosniff");
+    assert_eq!(bytes, TINY_PNG.to_vec());
+    let etag = hdrs.get("etag").unwrap().to_str().unwrap().to_string();
+    let (st, _, bytes) = client
+        .request_raw(
+            Method::GET,
+            &cover_uri,
+            Some(&phone.token),
+            &[("if-none-match", &etag)],
+            Vec::new(),
+        )
+        .await;
+    assert_eq!(st, StatusCode::NOT_MODIFIED);
+    assert!(bytes.is_empty());
+
+    // Tipos invalidos / vazio / grande demais / source invalido.
+    let (st, _, _) = put(
+        cover_uri.clone(),
+        pc.token.clone(),
+        b"<svg onload=alert(1)/>".to_vec(),
+    )
+    .await;
+    assert_eq!(st, StatusCode::UNPROCESSABLE_ENTITY);
+    let (st, _, _) = put(cover_uri.clone(), pc.token.clone(), Vec::new()).await;
+    assert_eq!(st, StatusCode::UNPROCESSABLE_ENTITY);
+    let mut big = TINY_PNG.to_vec();
+    big.resize(2 * 1024 * 1024 + 1, 0);
+    let (st, _, bytes) = put(cover_uri.clone(), pc.token.clone(), big).await;
+    assert_eq!(
+        st,
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "{}",
+        String::from_utf8_lossy(&bytes)
+    );
+    let (st, _, _) = put(
+        format!("{cover_uri}?source=hack"),
+        pc.token.clone(),
+        TINY_PNG.to_vec(),
+    )
+    .await;
+    assert_eq!(st, StatusCode::BAD_REQUEST);
+    // Uma capa de exatamente 2 MiB e aceita (o limite da rota e maior que o do JSON).
+    let mut exact = vec![0xFF, 0xD8, 0xFF];
+    exact.resize(2 * 1024 * 1024, 0);
+    let (st, _, _) = put(
+        format!("{cover_uri}?source=custom"),
+        phone.token.clone(),
+        exact,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+
+    // A capa do usuario nao e sobrescrita pela embutida.
+    let (st, _, bytes) = put(
+        format!("{cover_uri}?source=embedded"),
+        pc.token.clone(),
+        TINY_PNG.to_vec(),
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    let ign: BookMetaResponse = serde_json::from_slice(&bytes).unwrap();
+    assert!(!ign.applied);
+    assert_eq!(ign.meta.cover_source.as_deref(), Some("custom"));
+
+    // Restaurar original: apaga; a lista "sem capa" volta a incluir o livro.
+    let (st, _, _) = client
+        .request_raw(Method::DELETE, &cover_uri, Some(&pc.token), &[], Vec::new())
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    let (st, _, _) = client
+        .request_raw(Method::GET, &cover_uri, Some(&pc.token), &[], Vec::new())
+        .await;
+    assert_eq!(st, StatusCode::NOT_FOUND);
+    let (_, without): (_, bookferry_server::routes::WithoutCoverResponse) = client
+        .request_json(
+            Method::GET,
+            "/books/without-cover",
+            Some(&pc.token),
+            Vec::new(),
+        )
+        .await;
+    assert_eq!(without.book_ids.len(), 3);
+    assert!(without.book_ids.contains(&book_id));
+
+    // --- Continuar lendo ---
+    let pos = PositionUpdate {
+        device_id: pc.device_id.clone(),
+        hlc: "1700000100000:0:pc".into(),
+        locator: "page:3".into(),
+        snippet: None,
+        percent: 30.0,
+    };
+    let (st, _, _) = client
+        .request_raw(
+            Method::PUT,
+            &format!("/books/{book_id}/position"),
+            Some(&pc.token),
+            &[],
+            serde_json::to_vec(&pos).unwrap(),
+        )
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    let hide = serde_json::to_vec(&serde_json::json!({ "hidden": true })).unwrap();
+    let (st, h): (_, BookMetaResponse) = client
+        .request_json(Method::PUT, &hidden_uri, Some(&phone.token), hide)
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    let hidden_at = h.meta.hidden_continue_at_ms.expect("hidden_at");
+
+    let (_, after): (_, BooksListResponse) = client
+        .request_json(Method::GET, "/books", Some(&pc.token), Vec::new())
+        .await;
+    let b = after.books.iter().find(|b| b.book_id == book_id).unwrap();
+    assert_eq!(b.hidden_continue_at_ms, Some(hidden_at));
+    assert_eq!(b.display_title.as_deref(), Some("Meu Nome"));
+    assert_eq!(b.cover_version, 0);
+    let pos_at = b.position.as_ref().unwrap().updated_at_ms;
+    assert!(
+        pos_at <= hidden_at,
+        "a posicao antiga nao pode reaparecer sozinha"
+    );
+
+    // Os metadados sobrevivem a um novo scan da biblioteca.
+    let (st, _, _) = client
+        .request_raw(
+            Method::POST,
+            "/library/rescan",
+            Some(&pc.token),
+            &[],
+            Vec::new(),
+        )
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    let (_, rescanned): (_, BooksListResponse) = client
+        .request_json(Method::GET, "/books", Some(&pc.token), Vec::new())
+        .await;
+    let b = rescanned
+        .books
+        .iter()
+        .find(|b| b.book_id == book_id)
+        .unwrap();
+    assert_eq!(b.display_title.as_deref(), Some("Meu Nome"));
+    assert_eq!(b.hidden_continue_at_ms, Some(hidden_at));
+
+    // Livro inexistente: 404 em todas as rotas de escrita.
+    let ghost = "ffffffffffffffffffffffffffffffff-1";
+    for (m, uri, body) in [
+        (
+            Method::PUT,
+            format!("/books/{ghost}/meta"),
+            br#"{"display_title":"x"}"#.to_vec(),
+        ),
+        (
+            Method::PUT,
+            format!("/books/{ghost}/continue-hidden"),
+            br#"{"hidden":true}"#.to_vec(),
+        ),
+        (
+            Method::PUT,
+            format!("/books/{ghost}/cover"),
+            TINY_PNG.to_vec(),
+        ),
+        (Method::DELETE, format!("/books/{ghost}/cover"), Vec::new()),
+    ] {
+        let (st, _, _) = client
+            .request_raw(m, &uri, Some(&pc.token), &[], body)
+            .await;
+        assert_eq!(st, StatusCode::NOT_FOUND, "{uri}");
+    }
+
+    let _ = handle.shutdown().await;
 }
