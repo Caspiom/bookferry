@@ -3,7 +3,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  ARROW_PAN_STEP_PX,
   BUILTIN_PRESETS,
+  arrowFallbackAction,
+  arrowPanDelta,
+  createWheelPager,
+  normalizeWheelDelta,
+  parentFolderPath,
+  parseGotoTarget,
+  resolveLibraryKeyAction,
   cameraErrorMessage,
   parsePairingPayload,
   DEFAULT_READER_PREFS,
@@ -480,19 +488,136 @@ describe('Zonas de toque e teclado', () => {
     assert.equal(resolveTapZone(NaN, 100), 'toggle');
   });
 
-  it('resolveKeyAction: setas, espaço, F, F11, Esc e RTL', () => {
-    assert.equal(resolveKeyAction({ key: 'ArrowRight' }), 'next');
-    assert.equal(resolveKeyAction({ key: 'ArrowRight' }, 'rtl'), 'prev');
-    assert.equal(resolveKeyAction({ key: 'ArrowLeft' }, 'rtl'), 'next');
+  it('resolveKeyAction: navegação, espaço, F, F11 e Esc', () => {
     assert.equal(resolveKeyAction({ key: ' ' }), 'next');
     assert.equal(resolveKeyAction({ key: ' ', shiftKey: true }), 'prev');
-    assert.equal(resolveKeyAction({ key: 'PageDown' }, 'rtl'), 'next');
+    assert.equal(resolveKeyAction({ key: 'PageDown' }), 'next');
+    assert.equal(resolveKeyAction({ key: 'PageUp' }), 'prev');
+    assert.equal(resolveKeyAction({ key: 'n' }), 'next');
+    assert.equal(resolveKeyAction({ key: 'P' }), 'prev');
+    assert.equal(resolveKeyAction({ key: 'Backspace' }), 'prev');
+    assert.equal(resolveKeyAction({ key: 'ArrowDown', ctrlKey: true }), 'next');
+    assert.equal(resolveKeyAction({ key: 'ArrowUp', ctrlKey: true }), 'prev');
+    assert.equal(resolveKeyAction({ key: 'Home' }), 'first');
+    assert.equal(resolveKeyAction({ key: 'End' }), 'last');
     assert.equal(resolveKeyAction({ key: 'f' }), 'toggle-immersive');
     assert.equal(resolveKeyAction({ key: 'F11' }), 'toggle-fullscreen');
     assert.equal(resolveKeyAction({ key: 'Escape' }), 'escape');
-    assert.equal(resolveKeyAction({ key: '=', ctrlKey: true }), 'font-inc');
     assert.equal(resolveKeyAction({ key: 'a' }), null);
     assert.equal(resolveKeyAction({ key: 'ArrowRight', altKey: true }), null);
+    assert.equal(resolveKeyAction({ key: 'n', metaKey: true }), null);
+  });
+
+  it('resolveKeyAction: zoom, encaixe, sumário, "Ir para" e ajuda', () => {
+    for (const k of ['+', '=']) {
+      assert.equal(resolveKeyAction({ key: k }), 'zoom-in');
+      assert.equal(resolveKeyAction({ key: k, ctrlKey: true }), 'zoom-in');
+    }
+    for (const k of ['-', '_']) {
+      assert.equal(resolveKeyAction({ key: k }), 'zoom-out');
+      assert.equal(resolveKeyAction({ key: k, ctrlKey: true }), 'zoom-out');
+    }
+    assert.equal(resolveKeyAction({ key: '0' }), 'zoom-reset');
+    assert.equal(resolveKeyAction({ key: '0', ctrlKey: true }), 'zoom-reset');
+    assert.equal(resolveKeyAction({ key: 'w' }), 'toggle-fit');
+    assert.equal(resolveKeyAction({ key: 't' }), 'toggle-toc');
+    assert.equal(resolveKeyAction({ key: 'g' }), 'goto');
+    assert.equal(resolveKeyAction({ key: 'g', ctrlKey: true }), 'goto');
+    assert.equal(resolveKeyAction({ key: '?' }), 'help');
+    assert.equal(resolveKeyAction({ key: 'F1' }), 'help');
+    // Ctrl + tecla desconhecida não pode virar atalho de uma letra (Ctrl+W/Ctrl+T são do sistema).
+    assert.equal(resolveKeyAction({ key: 'w', ctrlKey: true }), null);
+    assert.equal(resolveKeyAction({ key: 't', ctrlKey: true }), null);
+  });
+
+  it('resolveKeyAction: setas devolvem a direção física; arrowFallbackAction decide a página', () => {
+    assert.equal(resolveKeyAction({ key: 'ArrowRight' }), 'arrow-right');
+    assert.equal(resolveKeyAction({ key: 'ArrowLeft' }), 'arrow-left');
+    assert.equal(resolveKeyAction({ key: 'ArrowDown' }), 'arrow-down');
+    assert.equal(resolveKeyAction({ key: 'ArrowUp' }), 'arrow-up');
+    assert.equal(arrowFallbackAction('arrow-right'), 'next');
+    assert.equal(arrowFallbackAction('arrow-left'), 'prev');
+    assert.equal(arrowFallbackAction('arrow-right', 'rtl'), 'prev');
+    assert.equal(arrowFallbackAction('arrow-left', 'rtl'), 'next');
+    // Cima/baixo não dependem da direção de leitura.
+    assert.equal(arrowFallbackAction('arrow-down', 'rtl'), 'next');
+    assert.equal(arrowFallbackAction('arrow-up', 'rtl'), 'prev');
+    assert.equal(arrowFallbackAction('next'), null);
+  });
+
+  it('arrowPanDelta: a seta move o conteúdo no sentido contrário ao da tecla', () => {
+    assert.deepEqual(arrowPanDelta('arrow-down'), { dx: 0, dy: -ARROW_PAN_STEP_PX });
+    assert.deepEqual(arrowPanDelta('arrow-up'), { dx: 0, dy: ARROW_PAN_STEP_PX });
+    assert.deepEqual(arrowPanDelta('arrow-right'), { dx: -ARROW_PAN_STEP_PX, dy: 0 });
+    assert.deepEqual(arrowPanDelta('arrow-left'), { dx: ARROW_PAN_STEP_PX, dy: 0 });
+    assert.equal(arrowPanDelta('next'), null);
+  });
+
+  it('resolveLibraryKeyAction: busca, atualizar, ajustes, ajuda e subir pasta', () => {
+    assert.equal(resolveLibraryKeyAction({ key: '/' }), 'search');
+    assert.equal(resolveLibraryKeyAction({ key: 'f', ctrlKey: true }), 'search');
+    assert.equal(resolveLibraryKeyAction({ key: 'F5' }), 'refresh');
+    assert.equal(resolveLibraryKeyAction({ key: 'r', ctrlKey: true }), 'refresh');
+    assert.equal(resolveLibraryKeyAction({ key: ',', ctrlKey: true }), 'settings');
+    assert.equal(resolveLibraryKeyAction({ key: '?' }), 'help');
+    assert.equal(resolveLibraryKeyAction({ key: 'Backspace' }), 'up');
+    assert.equal(resolveLibraryKeyAction({ key: 'ArrowLeft', altKey: true }), 'up');
+    assert.equal(resolveLibraryKeyAction({ key: 'x' }), null);
+    assert.equal(resolveLibraryKeyAction({ key: 'f', ctrlKey: true, altKey: true }), null);
+    assert.equal(resolveLibraryKeyAction({ key: '/', metaKey: true }), null);
+  });
+
+  it('parentFolderPath sobe um nível e para na raiz', () => {
+    assert.equal(parentFolderPath('filosofia/Anarquismo/Individualismo'), 'filosofia/Anarquismo');
+    assert.equal(parentFolderPath('filosofia'), '');
+    assert.equal(parentFolderPath(''), '');
+    assert.equal(parentFolderPath(undefined), '');
+  });
+
+  it('normalizeWheelDelta converte linhas e páginas em pixels e rejeita lixo', () => {
+    assert.equal(normalizeWheelDelta({ deltaY: 100, deltaMode: 0 }), 100);
+    assert.equal(normalizeWheelDelta({ deltaY: 3, deltaMode: 1 }), 48);
+    assert.equal(normalizeWheelDelta({ deltaY: 1, deltaMode: 2 }), 400);
+    assert.equal(normalizeWheelDelta({ deltaY: NaN }), 0);
+    assert.equal(normalizeWheelDelta(null), 0);
+  });
+
+  it('createWheelPager: uma marcha vira uma página e a inércia não vira várias', () => {
+    const p = createWheelPager({ threshold: 40, cooldownMs: 220, gestureGapMs: 180 });
+    assert.equal(p.feed(100, 0), 1); // marcha de mouse: vira
+    assert.equal(p.feed(100, 50), 0); // inércia dentro do cooldown: ignorada
+    assert.equal(p.feed(100, 120), 0);
+    assert.equal(p.feed(100, 300), 1); // fora do cooldown: nova página
+    assert.equal(p.feed(-100, 700), -1); // outro sentido, depois de uma pausa
+  });
+
+  it('createWheelPager: trackpad acumula até o limite e mudar de sentido zera', () => {
+    const p = createWheelPager({ threshold: 40, cooldownMs: 0, gestureGapMs: 180 });
+    assert.equal(p.feed(15, 0), 0);
+    assert.equal(p.feed(15, 16), 0);
+    assert.equal(p.feed(15, 32), 1); // 45 >= 40
+    assert.equal(p.feed(20, 1000), 0);
+    assert.equal(p.feed(-30, 1010), 0); // virou o sentido: recomeça
+    assert.equal(p.feed(-30, 1020), -1);
+    assert.equal(p.feed(30, 5000), 0); // pausa longa zera o acumulado
+    assert.equal(p.feed(0, 5001), 0);
+    assert.equal(p.feed(NaN, 5002), 0);
+    p.reset();
+    assert.equal(p.feed(100, 6000), 1);
+  });
+
+  it('parseGotoTarget: aceita só dígitos (com % opcional) e limita à faixa', () => {
+    assert.equal(parseGotoTarget('42', 300), 42);
+    assert.equal(parseGotoTarget(' 42 ', 300), 42);
+    assert.equal(parseGotoTarget('42%', 100, 0), 42);
+    assert.equal(parseGotoTarget('999', 300), 300);
+    assert.equal(parseGotoTarget('0', 300), 1); // páginas começam em 1
+    assert.equal(parseGotoTarget('0', 100, 0), 0); // percentual aceita 0
+    assert.equal(parseGotoTarget('abc', 300), null);
+    assert.equal(parseGotoTarget('', 300), null);
+    assert.equal(parseGotoTarget('-3', 300), null);
+    assert.equal(parseGotoTarget('4.5', 300), null);
+    assert.equal(parseGotoTarget(null, 300), null);
   });
 });
 

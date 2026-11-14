@@ -701,6 +701,64 @@
       </div>
     </div>
 
+    <!-- AJUDA DE ATALHOS DE TECLADO (tecla ? ou F1) -->
+    <div
+      id="shortcuts-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shortcuts-title"
+    >
+      <div class="modal-card modal-card-wide">
+        <div class="modal-header">
+          <div class="modal-header-brand">
+            <div>
+              <h2 id="shortcuts-title">Atalhos de teclado</h2>
+              <span class="muted-note">Esc fecha esta janela</span>
+            </div>
+          </div>
+          <button
+            id="shortcuts-close"
+            type="button"
+            class="btn btn-icon"
+            aria-label="Fechar atalhos"
+            title="Fechar"
+          >
+            <svg class="icon" aria-hidden="true"><use href="#i-x" /></svg>
+          </button>
+        </div>
+        <div id="shortcuts-body" class="modal-scroll-body shortcuts-body"></div>
+      </div>
+    </div>
+
+    <!-- IR PARA PÁGINA / PERCENTUAL (tecla G) -->
+    <div
+      id="goto-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="goto-title"
+    >
+      <div class="modal-card modal-card-sm">
+        <h2 id="goto-title">Ir para...</h2>
+        <form id="goto-form" novalidate>
+          <input
+            id="goto-input"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            class="text-input"
+            aria-label="Número da página ou percentual"
+          />
+          <p id="goto-hint" class="muted-note"></p>
+          <div class="modal-actions">
+            <button id="goto-cancel" type="button" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Ir</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- MODAL DE CONFIGURAÇÕES E PAREAMENTO -->
     <div
       id="settings-modal"
