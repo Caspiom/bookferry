@@ -5,7 +5,6 @@ name: Release
 on:
   push:
     tags: ['v*']
-    branches: [ci/instaladores] # TEMPORARIO: validar o pipeline antes do merge; remover depois
   workflow_dispatch:
 
 env:
@@ -98,7 +97,7 @@ jobs:
   macos:
     needs: versao
     # Em push de branch (validacao) o macOS fica de fora: e o runner mais caro. Roda em tag e manualmente.
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/ci/instaladores' # TEMPORARIO
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     strategy:
       fail-fast: false
