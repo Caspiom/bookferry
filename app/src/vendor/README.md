@@ -8,5 +8,6 @@ Este diretório contém as bibliotecas de terceiros vendorizadas em JavaScript (
 | `foliate-js/vendor/fflate.js` | `fflate` (Arjun Barrett, embutido pelo `foliate-js`) | `0.8.x` (bundle original de `foliate-js/vendor/fflate.js`) | MIT | `https://github.com/101arrowz/fflate` |
 | `foliate-js/vendor/zip.js` | `@zip.js/zip.js` (Gildas Lormeau, embutido pelo `foliate-js`) | `2.7.x` (bundle original de `foliate-js/vendor/zip.js`) | BSD-3-Clause | `https://github.com/gildas-lormeau/zip.js` |
 | `pdfjs/` | `pdfjs-dist` (Mozilla PDF.js: `pdf.min.mjs` + `pdf.worker.min.mjs`) | `4.10.38` (copiada de `spike/app/src/vendor/pdfjs`) | Apache-2.0 | `https://github.com/mozilla/pdf.js` / `https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-4.10.38.tgz` |
+| `jsqr/` | `jsQR` (Cosmo Wolfe; leitor de QR Code em JS puro; `dist/jsQR.js` sem alterações) | `1.4.0` | Apache-2.0 | `https://github.com/cozmo/jsQR` / `https://registry.npmjs.org/jsqr/-/jsqr-1.4.0.tgz` |
 
 Consulte [`../../THIRD_PARTY_LICENSES`](../../THIRD_PARTY_LICENSES) na raiz de `app/` para os textos completos das licenças.

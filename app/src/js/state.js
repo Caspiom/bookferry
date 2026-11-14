@@ -966,3 +966,58 @@ export function initialPan(contentW, contentH, stageW, stageH, direction = 'ltr'
   const { limX, limY } = panLimits(contentW, contentH, stageW, stageH);
   return { tx: direction === 'rtl' ? -limX : limX, ty: limY };
 }
+
+/**
+ * Confere se o texto lido de um QR Code e o payload de pareamento do Bookferry (JSON do servidor
+ * desktop: `v`=1, `ips`, `port`, `cert_sha256`, `spki_sha256`, `secret`). Serve para a camera
+ * ignorar QR de outras coisas (links, Wi-Fi) em vez de tentar parear com eles. A validacao de
+ * verdade (formato dos hashes, expiracao do segredo) continua no Rust.
+ * @param {unknown} text
+ * @returns {string|null} o JSON original (sem espacos nas pontas) ou null se nao for do Bookferry
+ */
+export function parsePairingPayload(text) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{')) return null;
+  let obj;
+  try {
+    obj = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+  const filled = (v) => typeof v === 'string' && v.trim() !== '';
+  const ok =
+    obj.v === 1 &&
+    Array.isArray(obj.ips) &&
+    obj.ips.length > 0 &&
+    obj.ips.every(filled) &&
+    Number.isInteger(obj.port) &&
+    obj.port >= 1 &&
+    obj.port <= 65535 &&
+    filled(obj.cert_sha256) &&
+    filled(obj.spki_sha256) &&
+    filled(obj.secret);
+  return ok ? trimmed : null;
+}
+
+/**
+ * Mensagem para o usuario quando a camera nao abre (erro de `getUserMedia`).
+ * @param {{ name?: string }|null|undefined} err
+ * @returns {string}
+ */
+export function cameraErrorMessage(err) {
+  switch (err?.name) {
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return 'Sem permissão para usar a câmera. Libere em Configurações do Android > Apps > Bookferry > Permissões, ou cole o código.';
+    case 'NotFoundError':
+    case 'OverconstrainedError':
+      return 'Nenhuma câmera encontrada neste aparelho. Cole o código de pareamento.';
+    case 'NotReadableError':
+    case 'AbortError':
+      return 'A câmera está em uso por outro app. Feche-o e tente de novo.';
+    default:
+      return 'Não foi possível abrir a câmera. Cole o código de pareamento.';
+  }
+}
