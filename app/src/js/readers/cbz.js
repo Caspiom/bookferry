@@ -424,7 +424,9 @@ export async function mountCbzReader({
       if (ev.ctrlKey || ev.metaKey) {
         ev.preventDefault();
         const rect = stageEl.getBoundingClientRect();
-        setZoom(zoomScale + (ev.deltaY < 0 ? 0.15 : -0.15), {
+        // Proporcional ao delta, com teto de um passo do teclado (ver pdf.js).
+        const dz = -normalizeWheelDelta(ev) * 0.005;
+        setZoom(zoomScale + Math.max(-0.25, Math.min(0.25, dz)), {
           x: ev.clientX - rect.left,
           y: ev.clientY - rect.top,
         });

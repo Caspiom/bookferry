@@ -23,7 +23,7 @@ export const SHORTCUT_GROUPS = [
       { what: 'Ampliar', keys: ['+', 'Ctrl++', 'Ctrl+Roda para cima'] },
       { what: 'Reduzir', keys: ['−', 'Ctrl+−', 'Ctrl+Roda para baixo'] },
       { what: 'Zoom padrão (100%)', keys: ['0', 'Ctrl+0'] },
-      { what: 'Encaixe: página / largura / altura', keys: ['W'] },
+      { what: 'Alternar encaixe (página, largura; quadrinhos: também altura)', keys: ['W'] },
       { what: 'Esconder barras (modo imersivo)', keys: ['F'] },
       { what: 'Tela cheia', keys: ['F11'] },
       { what: 'Voltar: fecha painel, tela cheia, imersivo, leitor', keys: ['Esc'] },

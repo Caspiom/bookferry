@@ -268,8 +268,10 @@ export async function mountPdfReader({
     (ev) => {
       if (ev.ctrlKey || ev.metaKey) {
         ev.preventDefault();
-        const delta = ev.deltaY < 0 ? 0.15 : -0.15;
-        setZoom(zoomScale + delta);
+        // Proporcional ao delta, com teto de um passo do teclado: o notch do mouse dá um passo
+        // cheio e a pinça do trackpad (muitos eventos pequenos) não dispara até o limite.
+        const dz = -normalizeWheelDelta(ev) * 0.005;
+        setZoom(zoomScale + Math.max(-0.25, Math.min(0.25, dz)));
         return;
       }
       // Roda: rola a página se ela passa da tela; no limite (ou se cabe inteira) vira a página.

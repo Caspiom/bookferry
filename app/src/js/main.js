@@ -1820,6 +1820,11 @@ async function runE2eAutomation() {
       key('0');
       await sleep(900);
       k.zoom_reset_width = Math.abs(canvasW() - w0) < 2;
+      wheel(-4, { ctrlKey: true }); // pinça de trackpad: delta pequeno = zoom pequeno
+      await sleep(900);
+      k.pinch_small_step = canvasW() > w0 && canvasW() < w0 * 1.06;
+      key('0');
+      await sleep(900);
 
       key('g');
       await sleep(300);
@@ -1856,6 +1861,7 @@ async function runE2eAutomation() {
         arrow_pans_when_zoomed: true,
         wheel_pans_when_zoomed: true,
         zoom_reset_width: true,
+        pinch_small_step: true,
         goto_opened: true,
         goto_closed: true,
         goto_page: '2 / 5',
