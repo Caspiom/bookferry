@@ -28,6 +28,19 @@ sistema para a interface.
 | `mark.svg`                | só o símbolo, sem fundo                                       |
 | `logo-horizontal.svg`     | símbolo + nome (fundo claro); texto já convertido em curvas   |
 | `logo-horizontal-dark.svg`| símbolo + nome (fundo escuro)                                 |
+| `wordmark.svg`            | só o nome "Bookferry" em curvas (base para o kit)             |
+
+## Kit completo (SVG, PDF, PNG, JPEG, WebP, ICO, favicons, redes sociais, guia)
+
+```bash
+node app/branding/export-kit.mjs
+```
+
+Gera `app/branding/kit/` com o símbolo, o logo horizontal, o empilhado e o nome em cinco
+variações (colorido para fundo claro e escuro, uma cor em tinta, preto e branco), sete versões
+do ícone, favicons com `site.webmanifest`, imagens para Open Graph/GitHub/Play Store/X, avatar,
+papéis de parede e o `guia-de-marca.pdf`. Os vetores (`svg/`, `pdf/`), favicons e `.ico` ficam no
+repositório; PNG/JPEG/WebP e `social/` são regerados pelo script.
 
 ## Regerar os ícones do app
 
