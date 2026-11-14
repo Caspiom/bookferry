@@ -8,6 +8,7 @@
   pkg-config,
   wrapGAppsHook3,
   openssl,
+  dbus,
   webkitgtk_4_1,
   gtk3,
   libsoup_3,
@@ -29,6 +30,7 @@ let
     "spike"
     "gen"
     "screenshots"
+    "marca" # kit de marca gerado (rasters); o app so usa app/src e app/src-tauri/icons
     "node_modules"
   ];
 in
@@ -53,6 +55,7 @@ rustPlatform.buildRustPackage {
   ];
   buildInputs = [
     openssl
+    dbus # libdbus-sys (via tao, janela/tray)
     webkitgtk_4_1
     gtk3
     libsoup_3

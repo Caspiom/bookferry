@@ -14,7 +14,13 @@ import { updateBookMenu } from './book-menu.js';
 import { generateCoverIfMissing, generateMissingCovers, resizeImageToJpeg } from './covers.js';
 import { createReaderChrome } from './reader-chrome.js';
 import { createProgressBar, mountAaPanel, setReaderChromeTheme } from './reader-ui.js';
-import { bookDisplayTitle, formatBytes, formatPercent, sanitizeProgressPrefs } from './state.js';
+import {
+  bookDisplayTitle,
+  formatBytes,
+  formatPercent,
+  isHiddenFromContinue,
+  sanitizeProgressPrefs,
+} from './state.js';
 import {
   applyTheme,
   downloadModal,
@@ -199,6 +205,13 @@ export async function openBookFlow(book) {
 
   const { book: readyBook, initialPosition } = prepared;
   appState.activeBook = readyBook;
+
+  // Abrir um livro tirado de "Continuar lendo" o traz de volta na hora. Não dá para depender da
+  // posição salva: ela só muda quando a página muda, e quem só abre e fecha não mexeria nela.
+  const listedBook = appState.books.find((b) => b.book_id === readyBook.book_id);
+  if (isHiddenFromContinue(listedBook || readyBook)) {
+    api.setContinueHidden(readyBook.book_id, false).catch(() => {});
+  }
 
   // Atualiza status de baixado na lista local
   const idx = appState.books.findIndex((b) => b.book_id === readyBook.book_id);
@@ -1276,6 +1289,23 @@ async function runE2eAutomation() {
       await api.setPosition(epubBook.book_id, pos.locator, pos.percent, pos.snippet);
       cv.back_after_reading = await waitFor(inContinue, 8000);
       if (!cv.back_after_reading) problems.push('livro não voltou ao Continuar lendo depois de ler');
+
+      // Só abrir o livro (sem virar página, sem salvar posição) também traz de volta.
+      cardIn('#continue-reading-grid', epubBook.book_id)
+        ?.querySelector('.book-continue-hide-btn')
+        ?.click();
+      cv.hidden_again = await waitFor(() => !inContinue(), 6000);
+      if (!cv.hidden_again) problems.push('segundo ✕ não tirou do Continuar lendo');
+      await openBookFlow(byId(epubBook.book_id) || epubBook);
+      // O livro deixa de estar escondido assim que abre (conferido no estado, com o leitor aberto)...
+      cv.unhidden_on_open = await waitFor(() => !byId(epubBook.book_id)?.hidden_continue_at_ms, 8000);
+      document.getElementById('btn-reader-back')?.click();
+      // ...e aparece em Continuar lendo ao voltar para a biblioteca.
+      cv.back_after_open_only = await waitFor(inContinue, 8000);
+      if (!cv.unhidden_on_open || !cv.back_after_open_only) {
+        problems.push('só abrir o livro não o trouxe de volta ao Continuar lendo');
+      }
+      await sleep(300);
 
       // Modal "Editar livro": abre pelo botão ⋯, renomeia pelo campo, mostra a busca com o texto
       // já limpo e fecha com Esc (a busca em si depende da internet, então não é exigida aqui).
