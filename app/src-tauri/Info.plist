@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Mesclado ao Info.plist do app pelo Tauri. O macOS pede "Rede local" para o celular achar e falar com este computador. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>O Bookferry usa a rede local para sincronizar a leitura com o seu celular.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_bookferry._tcp</string>
+  </array>
+</dict>
+</plist>

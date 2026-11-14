@@ -8,7 +8,6 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -1490,6 +1489,7 @@ pub fn ensure_file_0600(path: &Path) -> Result<(), ClientError> {
 pub fn write_secret_file_0600(path: &Path, bytes: &[u8]) -> Result<(), ClientError> {
     #[cfg(unix)]
     {
+        use std::io::Write;
         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
         let mut f = OpenOptions::new()
             .create(true)

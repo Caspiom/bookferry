@@ -1,0 +1,217 @@
+# Instaladores. Uma tag `vX.Y.Z` (igual a versao do tauri.conf.json) gera um release em RASCUNHO com
+# todos os arquivos e SHA256SUMS. Rodando manualmente (workflow_dispatch) so gera os artefatos.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  versao:
+    runs-on: ubuntu-latest
+    outputs:
+      versao: ${{ steps.v.outputs.versao }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          v=$(python3 -c "import json;print(json.load(open('app/src-tauri/tauri.conf.json'))['version'])")
+          echo "versao=$v" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$v" ]; then
+            echo "A tag ${GITHUB_REF_NAME} difere da versao do app (v$v)"; exit 1
+          fi
+
+  linux:
+    needs: versao
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config patchelf file xdg-utils \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libssl-dev libdbus-1-dev \
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall tauri-cli --version 2.11.0 --no-confirm --locked
+      - name: Gerar .deb, .rpm e AppImage
+        working-directory: app/src-tauri
+        env:
+          NO_STRIP: "true"
+        run: cargo tauri build --bundles deb,rpm,appimage
+      - name: Reunir arquivos
+        run: |
+          mkdir dist
+          cp target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm target/release/bundle/appimage/*.AppImage dist/
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  windows:
+    needs: versao
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall tauri-cli --version 2.11.0 --no-confirm --locked
+      - name: Gerar instalador NSIS
+        working-directory: app/src-tauri
+        run: cargo tauri build --bundles nsis
+      - name: Reunir arquivos
+        shell: bash
+        run: |
+          mkdir dist
+          cp target/release/bundle/nsis/*.exe dist/
+          ls -la dist
+      - name: Teste de fumaca (instalar em silencio e abrir)
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem dist/*.exe).FullName
+          Start-Process -FilePath $exe -ArgumentList '/S' -Wait
+          $app = Join-Path $env:LOCALAPPDATA 'Bookferry\bookferry.exe'
+          if (-not (Test-Path $app)) {
+            Get-ChildItem $env:LOCALAPPDATA -Recurse -Filter bookferry.exe -ErrorAction SilentlyContinue | Select-Object -First 3 FullName
+            throw "bookferry.exe nao foi instalado em $app"
+          }
+          $p = Start-Process $app -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { throw "O app fechou sozinho (codigo $($p.ExitCode))" }
+          Write-Host "App aberto e vivo apos 15 s"
+          Stop-Process $p -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  macos:
+    needs: versao
+    # Em push de branch (validacao) o macOS fica de fora: e o runner mais caro. Roda em tag e manualmente.
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        alvo: [aarch64-apple-darwin, x86_64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.alvo }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.alvo }}
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall tauri-cli --version 2.11.0 --no-confirm --locked
+      - name: Gerar .dmg
+        working-directory: app/src-tauri
+        run: cargo tauri build --target ${{ matrix.alvo }} --bundles dmg
+      - name: Reunir arquivos
+        run: |
+          mkdir dist
+          cp target/${{ matrix.alvo }}/release/bundle/dmg/*.dmg dist/
+          ls -la dist
+      - name: Teste de fumaca (abrir o app do .dmg)
+        if: matrix.alvo == 'aarch64-apple-darwin'
+        run: |
+          hdiutil attach dist/*.dmg -mountpoint /Volumes/bf -nobrowse
+          cp -R /Volumes/bf/Bookferry.app /Applications/
+          hdiutil detach /Volumes/bf
+          codesign -dv --verbose=2 /Applications/Bookferry.app 2>&1 | grep -E "Identifier|Signature|flags" || true
+          /Applications/Bookferry.app/Contents/MacOS/bookferry &
+          pid=$!
+          sleep 15
+          kill -0 $pid && echo "App aberto e vivo apos 15 s"
+          kill $pid
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.alvo }}
+          path: dist/*
+
+  android:
+    needs: versao
+    runs-on: ubuntu-22.04
+    env:
+      NDK_VERSION: 27.3.13750724
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: NDK (o SDK ja vem no runner)
+        run: |
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses > /dev/null || true
+          "$sdk" "ndk;${NDK_VERSION}"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall tauri-cli --version 2.11.0 --no-confirm --locked
+      - name: Chave de assinatura
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          d=app/src-tauri/gen/android
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "storePassword=$KS_PASS"
+            echo "keyPassword=$KEY_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+          } > "$d/keystore.properties"
+      - name: Gerar APK de release (arm64)
+        working-directory: app/src-tauri
+        run: cargo tauri android build --apk --target aarch64
+      - name: Conferir assinatura e reunir
+        run: |
+          apk=$(ls app/src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk | head -1)
+          signer="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          "$signer" verify --print-certs "$apk"
+          mkdir dist
+          cp "$apk" "dist/Bookferry_${{ needs.versao.outputs.versao }}_android-arm64.apk"
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*
+
+  publicar:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [versao, linux, windows, macos, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+      - name: Release em rascunho
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" \
+            --draft --title "Bookferry ${GITHUB_REF_NAME}" \
+            --notes "Instaladores para Linux (.deb, .rpm, AppImage), Windows, macOS e Android. Confira os hashes em SHA256SUMS."
