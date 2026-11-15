@@ -2116,6 +2116,12 @@ code {
   margin-bottom: 14px;
 }
 
+.settings-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .settings-section h3 {
   margin: 0 0 14px 0;
   font-size: 1.08rem;

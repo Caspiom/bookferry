@@ -65,6 +65,22 @@ function showScreen(screenId) {
   }
 }
 
+// Reflete no checkbox o estado REAL do início com o computador (o arquivo de autostart do
+// sistema), e avisa nos sistemas em que essa parte ainda não existe.
+async function refreshAutostartControl() {
+  const box = document.getElementById('settings-autostart');
+  const note = document.getElementById('settings-autostart-note');
+  if (!box) return;
+  try {
+    const st = await api.getAutostart();
+    box.checked = !!st.enabled;
+    box.disabled = !st.supported;
+    note?.classList.toggle('hidden', !!st.supported);
+  } catch (_) {
+    box.disabled = true;
+  }
+}
+
 async function refreshStatus() {
   const st = await api.status();
   appState.status = st;
@@ -89,6 +105,15 @@ async function refreshStatus() {
   const themeSelect = document.getElementById('settings-theme-select');
   if (themeSelect && st.settings?.theme) {
     themeSelect.value = st.settings.theme;
+  }
+
+  // Segundo plano (bandeja e início com o computador): só existe no desktop.
+  const backgroundSection = document.getElementById('settings-desktop-background');
+  backgroundSection?.classList.toggle('hidden', !isDesktop);
+  if (isDesktop) {
+    const closeToTray = document.getElementById('settings-close-to-tray');
+    if (closeToTray) closeToTray.checked = st.settings?.close_to_tray !== false;
+    await refreshAutostartControl();
   }
 
   // Leitura de QR pela câmera só no celular (o webview do desktop não expõe a câmera).
@@ -719,6 +744,37 @@ function setupEventListeners() {
     }
   });
 
+  // Bandeja e início com o computador: valem na hora, sem o botão Salvar.
+  document.getElementById('settings-close-to-tray')?.addEventListener('change', async (ev) => {
+    const box = ev.target;
+    try {
+      await api.saveSettings({ closeToTray: box.checked });
+      showToast(
+        box.checked
+          ? 'Fechar a janela agora mantém o Bookferry na bandeja.'
+          : 'Fechar a janela agora encerra o Bookferry.',
+      );
+    } catch (err) {
+      box.checked = !box.checked;
+      showToast(`Erro ao salvar: ${err}`);
+    }
+  });
+  document.getElementById('settings-autostart')?.addEventListener('change', async (ev) => {
+    const box = ev.target;
+    try {
+      const st = await api.setAutostart(box.checked);
+      box.checked = !!st.enabled;
+      showToast(
+        st.enabled
+          ? 'O Bookferry vai iniciar em segundo plano quando você ligar o computador.'
+          : 'O Bookferry não inicia mais com o computador.',
+      );
+    } catch (err) {
+      await refreshAutostartControl();
+      showToast(`Erro: ${err}`);
+    }
+  });
+
   // Desparear dispositivo
   document.getElementById('btn-unpair-device')?.addEventListener('click', async () => {
     try {
@@ -1017,6 +1073,55 @@ async function runE2eAutomation() {
       };
       const bad = Object.entries(want).filter(([name, v]) => T[name] !== v);
       if (bad.length) throw new Error(`Tema Breu: ${JSON.stringify(bad)} | ${JSON.stringify(T)}`);
+    }
+
+    // Segundo plano: a seção só existe no desktop; "fechar mantém na bandeja" persiste pelo Rust e
+    // "iniciar com o computador" grava/remove o arquivo de autostart de verdade (o run-e2e.sh
+    // aponta XDG_CONFIG_HOME para um diretório temporário e confere o arquivo no fim).
+    {
+      const S = {};
+      const flip = async (id, value) => {
+        const box = document.getElementById(id);
+        box.checked = value;
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+        await sleep(700);
+      };
+      document.getElementById('btn-open-settings')?.click();
+      await sleep(500);
+      const section = document.getElementById('settings-desktop-background');
+      S.section_visible = !!section && !section.classList.contains('hidden');
+      S.close_to_tray_default = document.getElementById('settings-close-to-tray').checked;
+      await flip('settings-close-to-tray', false);
+      S.close_to_tray_off = (await api.status()).settings.close_to_tray;
+      await flip('settings-close-to-tray', true);
+      S.close_to_tray_on = (await api.status()).settings.close_to_tray;
+      S.autostart_start = (await api.getAutostart()).enabled;
+      await flip('settings-autostart', true);
+      S.autostart_on = (await api.getAutostart()).enabled;
+      await flip('settings-autostart', false);
+      S.autostart_off = (await api.getAutostart()).enabled;
+      await flip('settings-autostart', true); // fica ligado: o run-e2e.sh confere o arquivo
+      S.autostart_final = (await api.getAutostart()).enabled;
+      S.autostart_box = document.getElementById('settings-autostart').checked;
+      section?.scrollIntoView({ block: 'center' });
+      await sleep(300);
+      results.screenshots.push(await api.e2eCaptureScreenshot('17-ajustes-segundo-plano'));
+      document.getElementById('btn-close-settings')?.click();
+      await sleep(300);
+      results.steps.segundo_plano = S;
+      const want = {
+        section_visible: true,
+        close_to_tray_default: true,
+        close_to_tray_off: false,
+        close_to_tray_on: true,
+        autostart_start: false,
+        autostart_on: true,
+        autostart_off: false,
+        autostart_final: true,
+        autostart_box: true,
+      };
+      const bad = Object.entries(want).filter(([name, v]) => S[name] !== v);
+      if (bad.length) throw new Error(`Segundo plano: ${JSON.stringify(bad)} | ${JSON.stringify(S)}`);
     }
     // Logo: de dentro de uma pasta e com busca ativa, volta ao início (raiz, busca limpa).
     {

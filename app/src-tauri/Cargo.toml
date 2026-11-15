@@ -18,7 +18,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 bookferry-core = { workspace = true }
 bookferry-client = { path = "../../crates/bookferry-client" }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -28,6 +28,7 @@ tracing-subscriber = { workspace = true }
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
+tauri-plugin-single-instance = "2"
 bookferry-server = { path = "../../crates/bookferry-server" }
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 hyper = { workspace = true }
