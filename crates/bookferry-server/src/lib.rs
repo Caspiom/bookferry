@@ -3,6 +3,7 @@
 pub mod db;
 pub mod error;
 pub mod library;
+pub mod limits;
 pub mod mdns;
 pub mod meta;
 pub mod routes;
@@ -23,6 +24,7 @@ pub use crate::tls::{
 
 use crate::db::Database;
 use crate::library::scan_vault_dir;
+use crate::limits::{track_in_flight, ActivityStream, ConnActivity, ConnectionLimiter};
 use crate::mdns::MdnsHandle;
 use crate::routes::{build_router, AppState, PairingSession};
 use crate::tls::load_or_generate_tls;
@@ -30,7 +32,7 @@ use bookferry_core::{
     generate_random_hex, Clock, HlcClock, PairingQrPayload, SystemClock,
     DEFAULT_MAX_FUTURE_DRIFT_MS, DEFAULT_POSITION_HISTORY_LIMIT,
 };
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 use hyper_util::server::conn::auto::Builder as ConnBuilder;
 use hyper_util::service::TowerToHyperService;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -58,6 +60,19 @@ pub const DEFAULT_FAILURE_DELAY: Duration = Duration::from_millis(25);
 
 /// Intervalo padrao de keepalive no SSE (5 segundos).
 pub const DEFAULT_SSE_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Conexoes simultaneas aceitas no total (cada aparelho usa umas poucas: SSE + requisicoes).
+pub const DEFAULT_MAX_CONNECTIONS: usize = 256;
+
+/// Conexoes simultaneas aceitas de um mesmo IP (o loopback do app desktop fica de fora).
+pub const DEFAULT_MAX_CONNECTIONS_PER_IP: usize = 64;
+
+/// Tempo maximo para um cliente terminar de enviar os cabecalhos de uma requisicao.
+pub const DEFAULT_HEADER_READ_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Tempo sem nenhum trafego (e sem requisicao em andamento) apos o qual a conexao e encerrada.
+/// O SSE manda keepalive a cada 5 s, entao nunca fica ocioso por isso.
+pub const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Quantidade padrao de eventos SSE retidos para replay via `Last-Event-ID`.
 pub const DEFAULT_SSE_REPLAY_LIMIT: usize = 200;
@@ -97,6 +112,14 @@ pub struct Config {
     pub position_history_limit: usize,
     /// Deriva maxima permitida no futuro para o `wall_ms` de um HLC recebido.
     pub max_future_drift_ms: u64,
+    /// Teto de conexoes simultaneas no total; acima disso a conexao e fechada antes do TLS.
+    pub max_connections: usize,
+    /// Teto de conexoes simultaneas por IP de origem (loopback isento).
+    pub max_connections_per_ip: usize,
+    /// Tempo maximo para receber os cabecalhos de uma requisicao (contra conexao lenta/ociosa).
+    pub header_read_timeout: Duration,
+    /// Tempo sem trafego apos o qual uma conexao ociosa (ou muda, logo apos o TLS) e encerrada.
+    pub idle_timeout: Duration,
     /// Limite maximo em bytes para corpos de requisicao JSON.
     pub max_json_body_bytes: usize,
     /// Relogio injetavel (padrao: `SystemClock`).
@@ -121,6 +144,10 @@ impl std::fmt::Debug for Config {
             .field("sse_replay_limit", &self.sse_replay_limit)
             .field("position_history_limit", &self.position_history_limit)
             .field("max_future_drift_ms", &self.max_future_drift_ms)
+            .field("max_connections", &self.max_connections)
+            .field("max_connections_per_ip", &self.max_connections_per_ip)
+            .field("header_read_timeout", &self.header_read_timeout)
+            .field("idle_timeout", &self.idle_timeout)
             .field("max_json_body_bytes", &self.max_json_body_bytes)
             .finish()
     }
@@ -146,6 +173,10 @@ impl Config {
             sse_replay_limit: DEFAULT_SSE_REPLAY_LIMIT,
             position_history_limit: DEFAULT_POSITION_HISTORY_LIMIT,
             max_future_drift_ms: DEFAULT_MAX_FUTURE_DRIFT_MS,
+            max_connections: DEFAULT_MAX_CONNECTIONS,
+            max_connections_per_ip: DEFAULT_MAX_CONNECTIONS_PER_IP,
+            header_read_timeout: DEFAULT_HEADER_READ_TIMEOUT,
+            idle_timeout: DEFAULT_IDLE_TIMEOUT,
             max_json_body_bytes: DEFAULT_MAX_JSON_BODY_BYTES,
             clock: Arc::new(SystemClock),
         }
@@ -307,6 +338,9 @@ pub async fn start(config: Config) -> Result<ServerHandle, ServerError> {
 
     let router = build_router(state.clone(), config.max_json_body_bytes);
     let acceptor = tls_identity.acceptor.clone();
+    let limiter = ConnectionLimiter::new(config.max_connections, config.max_connections_per_ip);
+    let header_read_timeout = config.header_read_timeout;
+    let idle_timeout = config.idle_timeout.max(Duration::from_millis(100));
 
     let accept_task = tokio::spawn(async move {
         loop {
@@ -327,12 +361,18 @@ pub async fn start(config: Config) -> Result<ServerHandle, ServerError> {
                             continue;
                         }
                     };
+                    // Teto de conexoes: derruba antes de gastar CPU com o handshake TLS.
+                    let Some(permit) = limiter.try_acquire(peer_addr.ip()) else {
+                        tracing::debug!(peer = %peer_addr, "conexao recusada: teto de conexoes atingido");
+                        continue;
+                    };
                     let _ = tcp_stream.set_nodelay(true);
                     let acceptor = acceptor.clone();
                     let router = router.clone();
                     let mut conn_shutdown_rx = shutdown_rx.clone();
 
                     tokio::spawn(async move {
+                        let _permit = permit;
                         let tls_stream = match tokio::time::timeout(
                             Duration::from_secs(10),
                             acceptor.accept(tcp_stream),
@@ -350,9 +390,18 @@ pub async fn start(config: Config) -> Result<ServerHandle, ServerError> {
                             }
                         };
 
-                        let io = TokioIo::new(tls_stream);
+                        let activity = ConnActivity::new();
+                        let io = TokioIo::new(ActivityStream::new(tls_stream, activity.clone()));
+                        let router = router.layer(axum::middleware::from_fn_with_state(
+                            activity.clone(),
+                            track_in_flight,
+                        ));
                         let svc = TowerToHyperService::new(router);
-                        let builder = ConnBuilder::new(TokioExecutor::new());
+                        let mut builder = ConnBuilder::new(TokioExecutor::new());
+                        builder
+                            .http1()
+                            .timer(TokioTimer::new())
+                            .header_read_timeout(header_read_timeout);
                         let conn = builder.serve_connection(io, svc);
                         tokio::pin!(conn);
 
@@ -361,6 +410,9 @@ pub async fn start(config: Config) -> Result<ServerHandle, ServerError> {
                             _ = conn_shutdown_rx.changed() => {
                                 conn.as_mut().graceful_shutdown();
                                 let _ = tokio::time::timeout(Duration::from_secs(2), conn).await;
+                            }
+                            _ = activity.wait_idle(idle_timeout) => {
+                                tracing::debug!(peer = %peer_addr, "conexao ociosa encerrada");
                             }
                         }
                     });

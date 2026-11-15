@@ -376,7 +376,10 @@ async fn tls_persistent_fingerprint_pinning_and_cleartext_rejected() {
         .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(status_body.status, "ok");
-    assert_eq!(status_body.book_count, 3);
+    // Sem token, /status nao revela nome do servidor, tamanho da biblioteca nem uptime.
+    assert_eq!(status_body.book_count, None);
+    assert_eq!(status_body.server_name, None);
+    assert_eq!(status_body.uptime_ms, None);
 
     // (b) Pin errado (cert_sha256 diferente) -> Handshake TLS falha
     let bad_cert_client = PinnedTestClient::new(
@@ -1665,4 +1668,216 @@ async fn book_meta_title_cover_and_continue_hidden_over_http() {
     }
 
     let _ = handle.shutdown().await;
+}
+
+// ============================================================================
+// Endurecimento: /status sem metadados, teto de conexoes e timeout de cabecalho
+// ============================================================================
+
+#[tokio::test]
+async fn status_hides_metadata_without_a_valid_token() {
+    let tmp = TempDir::new().unwrap();
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let handle = start(test_config(&tmp.path().join("data"), &vault_dir))
+        .await
+        .unwrap();
+    let client = PinnedTestClient::new(
+        handle.local_addr(),
+        handle.cert_sha256(),
+        Some(handle.spki_sha256()),
+    );
+
+    // Sem token: so status + versao. O JSON cru nao pode nem ter as chaves.
+    let (st, _, raw) = client
+        .request_raw(Method::GET, "/status", None, &[], Vec::new())
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(v["status"], "ok");
+    assert!(v.get("server_name").is_none() && v.get("book_count").is_none());
+    assert!(v.get("uptime_ms").is_none());
+
+    // Token invalido: mesma resposta enxuta (nao vira 401, para o /status seguir util como ping).
+    let (st, _, raw) = client
+        .request_raw(
+            Method::GET,
+            "/status",
+            Some("bf_tok_invalido"),
+            &[],
+            Vec::new(),
+        )
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+    assert!(v.get("book_count").is_none());
+
+    // Aparelho pareado: ve tudo.
+    let (_, pair_bytes) = client
+        .pair_device(&handle.pairing_payload().secret, "Celular")
+        .await;
+    let pair: PairResponse = serde_json::from_slice(&pair_bytes).unwrap();
+    let (st, full): (_, StatusResponse) = client
+        .request_json(Method::GET, "/status", Some(&pair.token), Vec::new())
+        .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(full.book_count, Some(3));
+    assert_eq!(full.server_name.as_deref(), Some("bookferry-pc"));
+    assert!(full.uptime_ms.is_some());
+
+    handle.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn connection_cap_refuses_extra_connections_and_frees_slots() {
+    let tmp = TempDir::new().unwrap();
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let mut cfg = test_config(&tmp.path().join("data"), &vault_dir);
+    cfg.max_connections = 3;
+    let handle = start(cfg).await.unwrap();
+    let client = PinnedTestClient::new(
+        handle.local_addr(),
+        handle.cert_sha256(),
+        Some(handle.spki_sha256()),
+    );
+
+    let c1 = client.connect_tls().await.expect("1a conexao");
+    let _c2 = client.connect_tls().await.expect("2a conexao");
+    let _c3 = client.connect_tls().await.expect("3a conexao");
+    assert!(
+        client.connect_tls().await.is_err(),
+        "a 4a conexao simultanea deve ser recusada antes do TLS"
+    );
+
+    // Liberou uma vaga -> volta a aceitar (a vaga e devolvida quando a tarefa da conexao termina).
+    drop(c1);
+    let mut accepted = false;
+    for _ in 0..40 {
+        if client.connect_tls().await.is_ok() {
+            accepted = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(accepted, "vaga devolvida deve permitir nova conexao");
+
+    handle.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn loopback_is_exempt_from_per_ip_cap() {
+    // O app desktop fala com o servidor embutido por 127.0.0.1: nao pode ser barrado pelo teto por IP.
+    let tmp = TempDir::new().unwrap();
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let mut cfg = test_config(&tmp.path().join("data"), &vault_dir);
+    cfg.max_connections_per_ip = 1;
+    let handle = start(cfg).await.unwrap();
+    let client = PinnedTestClient::new(
+        handle.local_addr(),
+        handle.cert_sha256(),
+        Some(handle.spki_sha256()),
+    );
+    let _a = client.connect_tls().await.expect("loopback 1");
+    let _b = client.connect_tls().await.expect("loopback 2");
+    let _c = client.connect_tls().await.expect("loopback 3");
+    handle.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn silent_connection_is_closed_but_long_lived_sse_survives() {
+    let tmp = TempDir::new().unwrap();
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let mut cfg = test_config(&tmp.path().join("data"), &vault_dir);
+    cfg.header_read_timeout = Duration::from_secs(1);
+    cfg.idle_timeout = Duration::from_secs(1);
+    cfg.sse_keepalive_interval = Duration::from_millis(200);
+    let handle = start(cfg).await.unwrap();
+    let client = PinnedTestClient::new(
+        handle.local_addr(),
+        handle.cert_sha256(),
+        Some(handle.spki_sha256()),
+    );
+    let (_, pair_bytes) = client
+        .pair_device(&handle.pairing_payload().secret, "Celular")
+        .await;
+    let pair: PairResponse = serde_json::from_slice(&pair_bytes).unwrap();
+
+    // Cliente que completa o TLS e nunca manda requisicao: o servidor tem de encerrar.
+    let mut silent = client.connect_tls().await.unwrap();
+    let started = Instant::now();
+    let mut buf = [0u8; 16];
+    let closed = tokio::time::timeout(Duration::from_secs(5), silent.read(&mut buf)).await;
+    match closed {
+        Ok(Ok(0)) | Ok(Err(_)) => {}
+        other => panic!("conexao muda deveria ser encerrada, veio {other:?}"),
+    }
+    assert!(
+        started.elapsed() < Duration::from_secs(4),
+        "encerrou so apos {:?}",
+        started.elapsed()
+    );
+
+    // SSE aberto (o app depende dele) NAO pode cair por causa do timeout de cabecalho.
+    let resp = client.open_sse_stream(&pair.token, None).await;
+    let mut sse = SseStreamReader::new(resp);
+    assert!(
+        !sse.wait_for_eof(Duration::from_millis(3000)).await,
+        "o SSE deve seguir aberto bem alem do idle_timeout (1 s): o keepalive conta como trafego"
+    );
+
+    handle.shutdown().await.unwrap();
+}
+
+/// IP de saida da maquina (nao-loopback), sem enviar nenhum pacote. `None` se nao houver rede.
+fn local_lan_ip() -> Option<IpAddr> {
+    let sock = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    sock.connect("192.0.2.1:9").ok()?; // TEST-NET-1: so escolhe a rota, nada e transmitido
+    let ip = sock.local_addr().ok()?.ip();
+    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
+}
+
+#[tokio::test]
+async fn per_ip_cap_applies_to_a_non_loopback_peer() {
+    let Some(lan_ip) = local_lan_ip() else {
+        eprintln!("sem IP de rede local: teste do teto por IP ignorado");
+        return;
+    };
+    let tmp = TempDir::new().unwrap();
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let mut cfg = test_config(&tmp.path().join("data"), &vault_dir);
+    cfg.bind_addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED); // como no app: escuta em toda a rede
+    cfg.max_connections_per_ip = 2;
+    let handle = start(cfg).await.unwrap();
+    // Conectar ao IP da LAN faz o servidor ver a origem como esse IP, nao como 127.0.0.1.
+    let addr = SocketAddr::new(lan_ip, handle.local_addr().port());
+    let client = PinnedTestClient::new(addr, handle.cert_sha256(), Some(handle.spki_sha256()));
+
+    let _a = client.connect_tls().await.expect("1a conexao da LAN");
+    let _b = client.connect_tls().await.expect("2a conexao da LAN");
+    assert!(
+        client.connect_tls().await.is_err(),
+        "a 3a conexao do mesmo IP (nao-loopback) deve ser recusada"
+    );
+
+    // Outro "host" (o loopback) segue atendido enquanto o IP da LAN esta no teto.
+    let loop_client = PinnedTestClient::new(
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), handle.local_addr().port()),
+        handle.cert_sha256(),
+        Some(handle.spki_sha256()),
+    );
+    let _c = loop_client
+        .connect_tls()
+        .await
+        .expect("loopback nao e afetado");
+
+    handle.shutdown().await.unwrap();
 }

@@ -123,7 +123,7 @@ Todas as respostas incluem `X-Bookferry-Api: 1`. Todos os erros retornam JSON un
 
 | Método | Caminho | Auth (`Bearer`) | Request | Respostas e Códigos de Status |
 |---|---|---|---|---|
-| `GET` | `/status` | Não | — | `200 OK` `{status: "ok", version: "1", server_name, book_count, uptime_ms}` |
+| `GET` | `/status` | Opcional | — | `200 OK` `{status: "ok", version: "1"}`; com token de aparelho pareado acrescenta `server_name, book_count, uptime_ms` (ver `docs/07-seguranca-e-aparelhos.md`) |
 | `POST` | `/pair` | Não (segredo único) | `{secret, device_name}` | `200 OK` `{device_id, device_name, token, cert_sha256, spki_sha256}`; `401` (`invalid_pairing_secret`); `403` (`pairing_secret_already_used`); `410` (`pairing_secret_expired`); `422` (`invalid_device_name`); `429` (`pairing_rate_limited`) |
 | `GET` | `/devices` | Sim | — | `200 OK` `{devices: [{id, name, created_at_ms, last_seen_at_ms, revoked_at_ms?, revoked}]}`; `401` (`unauthorized`) |
 | `DELETE` | `/devices/:id` | Sim | — | `200 OK` `{revoked: true, id}` (encerra streams SSE ativos desse dispositivo); `404` (`device_not_found`); `401` (`unauthorized`) |

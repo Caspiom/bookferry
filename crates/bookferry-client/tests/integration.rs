@@ -1591,3 +1591,156 @@ async fn book_meta_title_hide_user_cover_precedence_and_old_versions_cleanup() {
     pc.shutdown().await.unwrap();
     srv.shutdown().await.unwrap();
 }
+
+// ============================================================================
+// Varios aparelhos num unico servidor (e um aparelho so fala com um servidor)
+// ============================================================================
+
+fn active_device_names(server_data_dir: &Path) -> Vec<String> {
+    let conn = Connection::open_with_flags(
+        server_data_dir.join("bookferry.db"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let mut stmt = conn
+        .prepare("SELECT name FROM devices WHERE revoked_at_ms IS NULL ORDER BY name")
+        .unwrap();
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0)).unwrap();
+    rows.map(|r| r.unwrap()).collect()
+}
+
+#[tokio::test]
+async fn one_server_serves_one_pc_and_two_phones_sharing_library_and_position() {
+    let tmp = TempDir::new().unwrap();
+    let srv_data = tmp.path().join("srv_data");
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let srv = start_server(test_server_config(&srv_data, &vault_dir))
+        .await
+        .unwrap();
+
+    // Um PC "so cliente" e dois celulares, cada um com seu proprio banco local.
+    let pc = Client::open(test_client_config(&tmp.path().join("pc"), "PC da sala"))
+        .await
+        .unwrap();
+    let phone_1 = Client::open(test_client_config(&tmp.path().join("p1"), "Celular 1"))
+        .await
+        .unwrap();
+    let phone_2 = Client::open(test_client_config(&tmp.path().join("p2"), "Celular 2"))
+        .await
+        .unwrap();
+    let mut rx_pc = pc.subscribe();
+    let mut rx_p2 = phone_2.subscribe();
+
+    // Cada aparelho usa o QR (segredo de uso unico) gerado para ele.
+    pc.pair(&srv.pairing_payload(), "PC da sala").await.unwrap();
+    phone_1
+        .pair(&srv.rotate_pairing_secret().unwrap(), "Celular 1")
+        .await
+        .unwrap();
+    phone_2
+        .pair(&srv.rotate_pairing_secret().unwrap(), "Celular 2")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        active_device_names(&srv_data),
+        vec!["Celular 1", "Celular 2", "PC da sala"]
+    );
+
+    // Mesma biblioteca para todos.
+    let ids = |snap: bookferry_client::LibrarySnapshot| {
+        let mut v: Vec<String> = snap.books.iter().map(|b| b.book_id.clone()).collect();
+        v.sort();
+        v
+    };
+    let lib_pc = ids(pc.library().await.unwrap());
+    assert_eq!(lib_pc.len(), 3);
+    assert_eq!(lib_pc, ids(phone_1.library().await.unwrap()));
+    assert_eq!(lib_pc, ids(phone_2.library().await.unwrap()));
+
+    for rx in [&mut rx_pc, &mut rx_p2] {
+        let ok = wait_for_event(rx, Duration::from_secs(3), |ev| {
+            matches!(ev, ClientEvent::Connected { .. })
+        })
+        .await
+        .is_some();
+        assert!(ok, "todo aparelho deve conectar ao SSE");
+        while rx.try_recv().is_ok() {}
+    }
+
+    // O celular 1 le ate a pagina 70: PC e celular 2 recebem na hora, pela mesma posicao.
+    phone_1
+        .set_position(&lib_pc[0], "page:70", None, 70.0)
+        .await
+        .unwrap();
+    for (rx, who) in [(&mut rx_pc, "PC"), (&mut rx_p2, "celular 2")] {
+        let got = wait_for_event(rx, Duration::from_secs(3), |ev| {
+            matches!(
+                ev,
+                ClientEvent::PositionChanged { position, origin: PositionOrigin::RemoteSse, .. }
+                    if position.locator == "page:70"
+            )
+        })
+        .await
+        .is_some();
+        assert!(got, "{who} deveria receber a posicao do celular 1");
+    }
+    assert_eq!(
+        pc.get_position(&lib_pc[0]).await.unwrap().unwrap().locator,
+        "page:70"
+    );
+
+    // A posicao e uma por livro para o servidor inteiro (nao ha usuarios separados).
+    for c in [&pc, &phone_1, &phone_2] {
+        c.shutdown().await.unwrap();
+    }
+    srv.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_device_talks_to_one_server_at_a_time() {
+    let tmp = TempDir::new().unwrap();
+    let vault_a = tmp.path().join("vault_a");
+    let vault_b = tmp.path().join("vault_b");
+    std::fs::create_dir_all(&vault_a).unwrap();
+    std::fs::create_dir_all(&vault_b).unwrap();
+    populate_sample_vault(&vault_a); // 3 livros
+    std::fs::write(
+        vault_b.join("Unico.epub"),
+        make_minimal_zip("OEBPS/c.xhtml", &[b'U'; 2048]),
+    )
+    .unwrap(); // 1 livro
+    let data_a = tmp.path().join("srv_a");
+    let data_b = tmp.path().join("srv_b");
+    let srv_a = start_server(test_server_config(&data_a, &vault_a))
+        .await
+        .unwrap();
+    let srv_b = start_server(test_server_config(&data_b, &vault_b))
+        .await
+        .unwrap();
+
+    let phone = Client::open(test_client_config(&tmp.path().join("phone"), "Celular"))
+        .await
+        .unwrap();
+    phone
+        .pair(&srv_a.pairing_payload(), "Celular")
+        .await
+        .unwrap();
+    assert_eq!(phone.library().await.unwrap().books.len(), 3);
+
+    // Parear com outro servidor SUBSTITUI o primeiro (ha um unico pareamento por aparelho).
+    phone
+        .pair(&srv_b.pairing_payload(), "Celular")
+        .await
+        .unwrap();
+    assert_eq!(phone.library().await.unwrap().books.len(), 1);
+
+    // O servidor A nao e avisado: o aparelho continua na lista dele, ate alguem revogar la.
+    assert_eq!(active_device_names(&data_a), vec!["Celular"]);
+
+    phone.shutdown().await.unwrap();
+    srv_a.shutdown().await.unwrap();
+    srv_b.shutdown().await.unwrap();
+}
