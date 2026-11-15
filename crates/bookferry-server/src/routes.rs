@@ -261,14 +261,30 @@ impl FromRequestParts<Arc<AppState>> for AuthenticatedDevice {
 pub struct StatusResponse {
     pub status: String,
     pub version: String,
-    pub server_name: String,
-    pub book_count: u64,
-    pub uptime_ms: u64,
+    /// Os campos abaixo so aparecem para um aparelho pareado (token valido): sem token, o
+    /// `/status` nao revela nome do servidor, tamanho da biblioteca nem tempo ligado.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub book_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uptime_ms: Option<u64>,
 }
 
 async fn handle_status(
+    // `Option`: token ausente ou invalido NAO e erro aqui, so devolve a versao enxuta.
+    auth: Option<AuthenticatedDevice>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<StatusResponse>, ApiError> {
+    if auth.is_none() {
+        return Ok(Json(StatusResponse {
+            status: "ok".to_string(),
+            version: API_VERSION.to_string(),
+            server_name: None,
+            book_count: None,
+            uptime_ms: None,
+        }));
+    }
     let book_count = state.db.count_books()?;
     let now_ms = state.clock.now_ms();
     let uptime_ms = now_ms.saturating_sub(state.started_at_ms);
@@ -276,9 +292,9 @@ async fn handle_status(
     Ok(Json(StatusResponse {
         status: "ok".to_string(),
         version: API_VERSION.to_string(),
-        server_name: state.server_name.clone(),
-        book_count,
-        uptime_ms,
+        server_name: Some(state.server_name.clone()),
+        book_count: Some(book_count),
+        uptime_ms: Some(uptime_ms),
     }))
 }
 
