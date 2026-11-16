@@ -417,7 +417,7 @@
             <button type="button" role="radio" class="aa-theme" data-theme="light"><span class="aa-swatch" aria-hidden="true">Aa</span>Claro</button>
             <button type="button" role="radio" class="aa-theme" data-theme="sepia"><span class="aa-swatch" aria-hidden="true">Aa</span>Sépia</button>
             <button type="button" role="radio" class="aa-theme" data-theme="dark"><span class="aa-swatch" aria-hidden="true">Aa</span>Escuro</button>
-            <button type="button" role="radio" class="aa-theme" data-theme="black"><span class="aa-swatch" aria-hidden="true">Aa</span>Preto</button>
+            <button type="button" role="radio" class="aa-theme" data-theme="black"><span class="aa-swatch" aria-hidden="true">Aa</span>Breu</button>
           </div>
         </div>
 
@@ -795,6 +795,13 @@
               <span id="server-running-badge" class="badge badge-offline">Parado</span>
             </div>
 
+            <div id="server-port-warning" class="port-warning hidden" role="alert">
+              <p id="server-port-warning-text"></p>
+              <button id="btn-retry-port" type="button" class="btn btn-ghost btn-sm">
+                Tentar a porta fixa de novo
+              </button>
+            </div>
+
             <label class="field-label" for="settings-vault-input">
               Pasta de livros (EPUB, PDF, CBZ)
             </label>
@@ -910,6 +917,7 @@
                   <option value="light">Claro</option>
                   <option value="dark">Escuro</option>
                   <option value="sepia">Sépia</option>
+                  <option value="black">Breu (preto)</option>
                 </select>
               </div>
             </div>
@@ -923,6 +931,28 @@
                 Salvar preferências
               </button>
             </div>
+          </section>
+
+          <!-- Segundo plano (só no desktop): bandeja e início com o computador -->
+          <section id="settings-desktop-background" class="settings-section hidden">
+            <h3>Segundo plano</h3>
+            <p class="muted-note">
+              O Bookferry pode ficar na bandeja do sistema com o servidor ligado, para o celular
+              sincronizar mesmo com a janela fechada.
+            </p>
+            <div class="settings-checks">
+              <label class="aa-check">
+                <input id="settings-close-to-tray" type="checkbox" />
+                Fechar a janela mantém o Bookferry na bandeja
+              </label>
+              <label class="aa-check">
+                <input id="settings-autostart" type="checkbox" />
+                Iniciar com o computador, em segundo plano
+              </label>
+            </div>
+            <p id="settings-autostart-note" class="muted-note hidden">
+              Iniciar com o computador ainda só está disponível no Linux.
+            </p>
           </section>
 
           <!-- Status de conexão do cliente -->

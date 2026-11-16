@@ -238,6 +238,8 @@ export function createReaderChrome({
       };
       try {
         nativeBridge()?.setVolumeKeysPaging?.(true);
+        // Android: durante a leitura a tela não apaga.
+        nativeBridge()?.setKeepScreenOn?.(true);
       } catch (_) {}
     },
     /** Leitor fechado: restaura interface, tela cheia e volume do sistema. */
@@ -245,6 +247,7 @@ export function createReaderChrome({
       active = false;
       try {
         nativeBridge()?.setVolumeKeysPaging?.(false);
+        nativeBridge()?.setKeepScreenOn?.(false);
       } catch (_) {}
       delete window.__bookferryVolumeKey;
       setImmersive(false);

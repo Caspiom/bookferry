@@ -82,9 +82,12 @@ export const api = {
   decideBookResume: (bookId) => invokeCommand('decide_book_resume', { bookId }),
   onResume: () => invokeCommand('on_resume'),
   cbzInfo: (bookId) => invokeCommand('cbz_info', { bookId }),
-  saveSettings: ({ defaultFontSize, theme, clientOnlyMode }) =>
-    invokeCommand('save_settings', { defaultFontSize, theme, clientOnlyMode }),
+  saveSettings: ({ defaultFontSize, theme, clientOnlyMode, closeToTray }) =>
+    invokeCommand('save_settings', { defaultFontSize, theme, clientOnlyMode, closeToTray }),
+  getAutostart: () => invokeCommand('get_autostart'),
+  setAutostart: (enabled) => invokeCommand('set_autostart', { enabled }),
   configureServerVault: (vaultDir) => invokeCommand('configure_server_vault', { vaultDir }),
+  retryPreferredPort: () => invokeCommand('retry_preferred_port'),
   rotatePairingQr: () => invokeCommand('rotate_pairing_qr'),
   listPairedDevices: () => invokeCommand('list_paired_devices'),
   revokePairedDevice: (deviceId) => invokeCommand('revoke_paired_device', { deviceId }),

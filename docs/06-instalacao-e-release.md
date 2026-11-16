@@ -31,6 +31,21 @@ O PC escuta na porta **47600** (TCP) e anuncia o serviço por mDNS. Se o celular
 - macOS: aceitar "Permitir conexões de entrada" e a permissão de "Rede local".
 - Roteadores com "isolamento de clientes" (Wi-Fi de visitantes) impedem o pareamento, qualquer que seja o instalador.
 
+### Segundo plano (desktop)
+
+O servidor roda dentro do app do PC, então o celular só sincroniza enquanto o app estiver de pé. Por isso o app
+fica na **bandeja do sistema**: fechar a janela só a esconde e o servidor segue ligado. Pelo ícone da bandeja:
+*Abrir Bookferry* traz a janela de volta e *Sair* encerra de verdade (servidor incluso).
+
+- Ajustes > **Segundo plano**: "Fechar a janela mantém o Bookferry na bandeja" (ligado por padrão) e
+  "Iniciar com o computador, em segundo plano".
+- "Iniciar com o computador" grava `~/.config/autostart/dev.gaspari.bookferry.desktop` (`Exec=bookferry --background`,
+  sem abrir janela). **Só no Linux** por enquanto; no Windows e no macOS o app ainda precisa ser aberto uma vez por sessão.
+- Abrir o app de novo (launcher) não sobe uma segunda cópia: traz a janela da que já roda (a porta 47600 é única).
+- Desktops sem bandeja visível (GNOME puro, sem a extensão AppIndicator): o ícone pode não aparecer. Nesse caso,
+  abra o Bookferry pelo launcher para trazer a janela de volta, ou desligue "Fechar a janela mantém o Bookferry na
+  bandeja" nos Ajustes. Este caso **não foi testado** (só o Noctalia, no niri).
+
 ## Publicar uma versão (mantenedor)
 
 1. Alterar a versão em `app/src-tauri/tauri.conf.json` (e `Cargo.toml` do workspace, para ficarem iguais).
@@ -62,6 +77,7 @@ Build local assinado: copiar `keystore.properties` para `app/src-tauri/gen/andro
 
 ## O que ainda não existe
 
+Iniciar com o computador no Windows e no macOS (hoje só Linux).
 Assinatura de código no Windows e macOS (custa dinheiro; ver `05-plano-entrega.md`), atualização automática, Play Store,
 Flatpak/AUR, Android x86_64/armv7.
 

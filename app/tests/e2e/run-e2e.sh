@@ -19,6 +19,8 @@ trap 'rm -rf "$TMP_ROOT"' EXIT
 
 VAULT_DIR="$TMP_ROOT/vault"
 DATA_DIR="$TMP_ROOT/data"
+# Autostart do teste vai para cá: nunca para o ~/.config do usuário.
+CONFIG_HOME="$TMP_ROOT/config"
 REPORT_FILE="$TMP_ROOT/e2e-report.json"
 LOG_FILE="$TMP_ROOT/e2e.log"
 
@@ -37,6 +39,7 @@ echo "==> [3/3] Executando fluxo E2E sob xvfb-run (1280x800x24) ..."
 BOOKFERRY_E2E=1 \
 BOOKFERRY_E2E_VAULT="$VAULT_DIR" \
 BOOKFERRY_E2E_DATA_DIR="$DATA_DIR" \
+XDG_CONFIG_HOME="$CONFIG_HOME" \
 BOOKFERRY_SCREENSHOTS_DIR="$SCREENSHOTS_DIR" \
 BOOKFERRY_E2E_OUT="$REPORT_FILE" \
 WEBKIT_DISABLE_COMPOSITING_MODE=1 \
@@ -53,6 +56,13 @@ timeout 150s xvfb-run -a -s "-screen 0 1280x800x24" \
 if [[ ! -f "$REPORT_FILE" ]]; then
   echo "ERRO: Relatório E2E não foi gerado. Log completo:"
   cat "$LOG_FILE"
+  exit 1
+fi
+
+# O teste deixa "iniciar com o computador" ligado: confere o arquivo de verdade, no diretório temporário.
+AUTOSTART_FILE="$CONFIG_HOME/autostart/dev.gaspari.bookferry.desktop"
+if ! grep -qx 'Exec=bookferry --background' "$AUTOSTART_FILE" 2>/dev/null; then
+  echo "ERRO: autostart não foi gravado em $AUTOSTART_FILE"
   exit 1
 fi
 

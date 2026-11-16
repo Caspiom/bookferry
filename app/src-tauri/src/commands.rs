@@ -40,12 +40,21 @@ const SETTINGS_FILENAME: &str = "settings.json";
 pub struct AppSettings {
     /// Tamanho de fonte padrao do leitor EPUB em pixels (12..=36).
     pub default_font_size: u32,
-    /// Preferencia de tema (`"auto"`, `"light"`, `"dark"`, `"sepia"`).
+    /// Preferencia de tema (`"auto"`, `"light"`, `"dark"`, `"sepia"`, `"black"`).
     pub theme: String,
     /// Caminho da pasta de livros (vault_dir) no Desktop.
     pub vault_dir: Option<String>,
     /// Quando `true` no Desktop, nao inicia o servidor embutido e opera como cliente puro.
     pub client_only_mode: bool,
+    /// Desktop: fechar a janela mantem o app (e o servidor) rodando na bandeja do sistema.
+    /// `serde(default)` e obrigatorio: um `settings.json` antigo sem o campo nao pode resetar
+    /// as demais preferencias (o `load` cai em `Default` se o JSON nao casar).
+    #[serde(default = "default_close_to_tray")]
+    pub close_to_tray: bool,
+}
+
+fn default_close_to_tray() -> bool {
+    true
 }
 
 impl Default for AppSettings {
@@ -55,6 +64,7 @@ impl Default for AppSettings {
             theme: "auto".to_string(),
             vault_dir: None,
             client_only_mode: false,
+            close_to_tray: true,
         }
     }
 }
@@ -85,6 +95,9 @@ pub struct DesktopServerRuntime {
     pub qr_created_at_ms: u64,
     pub qr_expires_at_ms: u64,
     pub initial_paired_count: usize,
+    /// `true` quando a porta fixa estava ocupada e o servidor subiu numa porta aleatoria
+    /// (o firewall do PC so libera a fixa, entao o celular nao alcancaria o servidor).
+    pub port_fallback: bool,
 }
 
 /// Estado global gerenciado pelo Tauri (`tauri::State<Arc<AppState>>`).
@@ -191,6 +204,10 @@ pub struct EmbeddedServerStatusDto {
     pub vault_dir: String,
     pub bind_addr: String,
     pub port: u16,
+    /// Porta que o servidor tenta usar (a unica liberada no firewall).
+    pub preferred_port: u16,
+    /// A porta preferida estava ocupada e o servidor esta numa porta aleatoria.
+    pub port_is_fallback: bool,
     pub cert_sha256: String,
     pub pairing_qr: Option<PairingQrViewDto>,
 }
@@ -305,6 +322,33 @@ fn build_qr_view(
     })
 }
 
+/// Sobe o servidor na porta preferida; se ela estiver ocupada, usa uma porta livre e devolve
+/// `true` no segundo item (fallback). Sem porta preferida (E2E) usa direto uma porta livre.
+#[cfg(not(target_os = "android"))]
+async fn start_on_preferred_port(
+    make_cfg: impl Fn(u16) -> ServerConfig,
+    preferred: Option<u16>,
+) -> Result<(ServerHandle, bool), String> {
+    let mut fell_back = false;
+    if let Some(port) = preferred {
+        match bookferry_server::start(make_cfg(port)).await {
+            Ok(handle) => return Ok((handle, false)),
+            Err(err) => {
+                fell_back = true;
+                tracing::warn!(
+                    port,
+                    error = %err,
+                    "porta fixa indisponivel; usando uma porta livre (o firewall pode bloquea-la para o celular)"
+                );
+            }
+        }
+    }
+    let handle = bookferry_server::start(make_cfg(0))
+        .await
+        .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?;
+    Ok((handle, fell_back))
+}
+
 #[cfg(not(target_os = "android"))]
 pub async fn start_or_restart_desktop_server(
     state: &Arc<AppState>,
@@ -349,31 +393,27 @@ pub async fn start_or_restart_desktop_server(
     };
 
     // Porta fixa 47600: é a que o firewall do PC libera (uma porta aleatória fica bloqueada para o celular).
-    // Se estiver ocupada (ou no E2E), cai para uma porta livre.
-    let handle = match (!cfg!(bookferry_e2e)).then(|| make_cfg(DEFAULT_SERVER_PORT)) {
-        Some(cfg) => match bookferry_server::start(cfg).await {
-            Ok(h) => h,
-            Err(_) => bookferry_server::start(make_cfg(0))
-                .await
-                .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?,
-        },
-        None => bookferry_server::start(make_cfg(0))
-            .await
-            .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?,
-    };
+    // Se estiver ocupada (ou no E2E), cai para uma porta livre, e a interface avisa (`port_fallback`).
+    let preferred = (!cfg!(bookferry_e2e)).then_some(DEFAULT_SERVER_PORT);
+    let (handle, port_fallback) = start_on_preferred_port(make_cfg, preferred).await?;
 
     let bound_port = handle.local_addr().port();
 
-    // Pareia automaticamente o cliente local do proprio Desktop em loopback (127.0.0.1)
-    let mut loopback_qr = handle.pairing_payload();
-    loopback_qr.ips = vec!["127.0.0.1".to_string()];
-    loopback_qr.ip = Some("127.0.0.1".to_string());
+    // Pareia o cliente local do proprio Desktop em loopback (127.0.0.1), a nao ser que o
+    // pareamento da sessao anterior ainda valha para este servidor.
+    if loopback_pairing_reusable(state, &handle).await {
+        tracing::info!("pareamento loopback anterior reaproveitado");
+    } else {
+        let mut loopback_qr = handle.pairing_payload();
+        loopback_qr.ips = vec!["127.0.0.1".to_string()];
+        loopback_qr.ip = Some("127.0.0.1".to_string());
 
-    state
-        .client
-        .pair(loopback_qr, "Bookferry Desktop")
-        .await
-        .map_err(|e| format!("falha no auto-pareamento loopback do desktop: {e}"))?;
+        state
+            .client
+            .pair(loopback_qr, "Bookferry Desktop")
+            .await
+            .map_err(|e| format!("falha no auto-pareamento loopback do desktop: {e}"))?;
+    }
 
     // Rotaciona imediatamente o segredo de uso unico para que o QR exibido ao celular seja novo!
     let fresh_qr = handle
@@ -390,6 +430,7 @@ pub async fn start_or_restart_desktop_server(
         qr_created_at_ms: now_ms,
         qr_expires_at_ms: now_ms.saturating_add(ttl_ms),
         initial_paired_count: 1,
+        port_fallback,
     };
 
     {
@@ -404,24 +445,19 @@ pub async fn start_or_restart_desktop_server(
     Ok(())
 }
 
+/// Lista os aparelhos no servidor embutido usando o token do proprio cliente loopback.
+/// `Ok(None)` = nao ha token local para tentar (nao pareado).
 #[cfg(not(target_os = "android"))]
-async fn query_embedded_devices(state: &Arc<AppState>) -> Result<Vec<DeviceViewDto>, String> {
-    let port = {
-        let guard = state.desktop_server.lock().await;
-        let Some(ref rt) = *guard else {
-            return Ok(Vec::new());
-        };
-        rt.handle.local_addr().port()
-    };
-
-    let Some(paired) = state.client.paired_info().map_err(|e| e.to_string())? else {
-        return Ok(Vec::new());
-    };
+async fn fetch_devices_via_loopback(
+    state: &Arc<AppState>,
+    port: u16,
+    paired: &PairedServerInfo,
+) -> Result<Option<DevicesListResponse>, String> {
     let token = std::fs::read_to_string(state.client.token_path())
         .map_err(|_| "token local nao encontrado".to_string())?;
     let token = token.trim();
     if token.is_empty() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
 
     let pin = TlsPin::new(
@@ -443,6 +479,51 @@ async fn query_embedded_devices(state: &Arc<AppState>) -> Result<Vec<DeviceViewD
         )
         .await
         .map_err(|e| e.to_string())?;
+    Ok(Some(resp))
+}
+
+/// O pareamento loopback ja guardado serve para o servidor que acabou de subir? Serve quando e o
+/// MESMO servidor (certificado TLS persistido), na mesma porta (e a que o cliente guardou) e o
+/// token ainda e aceito. Reaproveitar evita criar um "Bookferry Desktop" novo a cada abertura,
+/// o que, com o app iniciando junto com o computador, entupiria a lista de aparelhos.
+#[cfg(not(target_os = "android"))]
+async fn loopback_pairing_reusable(state: &Arc<AppState>, handle: &ServerHandle) -> bool {
+    let Ok(Some(paired)) = state.client.paired_info() else {
+        return false;
+    };
+    let payload = handle.pairing_payload();
+    let port = handle.local_addr().port();
+    if !pairing_matches_server(&paired, &payload.cert_sha256, port) {
+        return false;
+    }
+    matches!(
+        fetch_devices_via_loopback(state, port, &paired).await,
+        Ok(Some(_))
+    )
+}
+
+/// Parte pura da decisao de reaproveitar o pareamento (testavel sem servidor).
+#[cfg(not(target_os = "android"))]
+fn pairing_matches_server(paired: &PairedServerInfo, server_cert_sha256: &str, port: u16) -> bool {
+    paired.cert_sha256 == server_cert_sha256 && paired.port == port
+}
+
+#[cfg(not(target_os = "android"))]
+async fn query_embedded_devices(state: &Arc<AppState>) -> Result<Vec<DeviceViewDto>, String> {
+    let port = {
+        let guard = state.desktop_server.lock().await;
+        let Some(ref rt) = *guard else {
+            return Ok(Vec::new());
+        };
+        rt.handle.local_addr().port()
+    };
+
+    let Some(paired) = state.client.paired_info().map_err(|e| e.to_string())? else {
+        return Ok(Vec::new());
+    };
+    let Some(resp) = fetch_devices_via_loopback(state, port, &paired).await? else {
+        return Ok(Vec::new());
+    };
 
     let my_id = paired.device_id;
     let list = resp
@@ -500,6 +581,8 @@ pub async fn build_status_dto(state: &Arc<AppState>) -> Result<AppStatusDto, Str
                 vault_dir: rt.vault_dir.to_string_lossy().to_string(),
                 bind_addr: rt.handle.local_addr().ip().to_string(),
                 port: rt.handle.local_addr().port(),
+                preferred_port: DEFAULT_SERVER_PORT,
+                port_is_fallback: rt.port_fallback,
                 cert_sha256: rt.handle.cert_sha256().to_string(),
                 pairing_qr: qr_view,
             })
@@ -890,6 +973,7 @@ pub async fn save_settings(
     default_font_size: Option<u32>,
     theme: Option<String>,
     client_only_mode: Option<bool>,
+    close_to_tray: Option<bool>,
 ) -> Result<AppStatusDto, String> {
     {
         let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
@@ -898,12 +982,18 @@ pub async fn save_settings(
         }
         if let Some(th) = theme {
             let clean = th.trim().to_ascii_lowercase();
-            if matches!(clean.as_str(), "auto" | "light" | "dark" | "sepia") {
+            if matches!(
+                clean.as_str(),
+                "auto" | "light" | "dark" | "sepia" | "black"
+            ) {
                 settings.theme = clean;
             }
         }
         if let Some(co) = client_only_mode {
             settings.client_only_mode = co;
+        }
+        if let Some(ct) = close_to_tray {
+            settings.close_to_tray = ct;
         }
         settings.save(&state.data_dir)?;
     }
@@ -912,12 +1002,13 @@ pub async fn save_settings(
 
 #[tauri::command]
 pub async fn configure_server_vault(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
     vault_dir: String,
 ) -> Result<AppStatusDto, String> {
     #[cfg(target_os = "android")]
     {
-        let _ = (state, vault_dir);
+        let _ = (app, state, vault_dir);
         Err("O servidor embutido nao esta disponivel no Android".to_string())
     }
     #[cfg(not(target_os = "android"))]
@@ -936,7 +1027,88 @@ pub async fn configure_server_vault(
             settings.save(&state.data_dir)?;
         }
 
+        // A linha de status da bandeja deixa de dizer "servidor desligado".
+        let port = state
+            .desktop_server
+            .lock()
+            .await
+            .as_ref()
+            .map(|rt| rt.handle.local_addr().port());
+        crate::desktop::refresh_tray_status(&app, port);
+
         build_status_dto(state.inner()).await
+    }
+}
+
+/// Reinicia o servidor para tentar voltar a porta fixa (usado quando ela estava ocupada).
+/// Devolve `true` se AINDA esta numa porta aleatoria. O segredo de pareamento muda.
+#[tauri::command]
+pub async fn retry_preferred_port(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = (app, state);
+        Err("O servidor embutido nao esta disponivel no Android".to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let vault_dir = {
+            let guard = state.desktop_server.lock().await;
+            let Some(ref rt) = *guard else {
+                return Err("Servidor desktop embutido nao esta em execucao".to_string());
+            };
+            rt.vault_dir.clone()
+        };
+        start_or_restart_desktop_server(state.inner(), vault_dir).await?;
+        let (port, still_fallback) = {
+            let guard = state.desktop_server.lock().await;
+            let rt = guard.as_ref().ok_or("servidor nao subiu")?;
+            (rt.handle.local_addr().port(), rt.port_fallback)
+        };
+        crate::desktop::refresh_tray_status(&app, Some(port));
+        Ok(still_fallback)
+    }
+}
+
+/// Estado do "iniciar com o computador" (a verdade e o arquivo de autostart do sistema, nao um
+/// campo em `settings.json`: assim some junto se o usuario apagar a entrada por fora).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AutostartDto {
+    pub supported: bool,
+    pub enabled: bool,
+}
+
+#[tauri::command]
+pub fn get_autostart() -> AutostartDto {
+    #[cfg(target_os = "android")]
+    {
+        AutostartDto {
+            supported: false,
+            enabled: false,
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        AutostartDto {
+            supported: crate::desktop::autostart_supported(),
+            enabled: crate::desktop::autostart_enabled(),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn set_autostart(enabled: bool) -> Result<AutostartDto, String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = enabled;
+        Err("Iniciar com o computador nao existe no Android".to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        crate::desktop::set_autostart(enabled)?;
+        Ok(get_autostart())
     }
 }
 
@@ -1395,5 +1567,106 @@ pub async fn is_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String>
     {
         let _ = window;
         Ok(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_cfg(dir: &std::path::Path) -> impl Fn(u16) -> ServerConfig + '_ {
+        move |port| {
+            let mut cfg = ServerConfig::new(dir.join("data"), dir.join("vault"));
+            cfg.bind_addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+            cfg.port = port;
+            cfg.enable_mdns = false;
+            cfg
+        }
+    }
+
+    #[tokio::test]
+    async fn porta_preferida_ocupada_cai_para_porta_livre_e_sinaliza_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("vault")).unwrap();
+        // Ocupa uma porta do mesmo jeito que outro programa ocuparia a 47600.
+        let squatter = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+        let busy = squatter.local_addr().unwrap().port();
+
+        let (handle, fell_back) = start_on_preferred_port(test_cfg(dir.path()), Some(busy))
+            .await
+            .unwrap();
+        assert!(fell_back, "porta ocupada deve sinalizar fallback");
+        assert_ne!(handle.local_addr().port(), busy);
+        handle.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn porta_preferida_livre_e_usada_sem_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("vault")).unwrap();
+        // Descobre uma porta livre e a solta para o servidor usar.
+        let free = {
+            let l = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+            l.local_addr().unwrap().port()
+        };
+        let (handle, fell_back) = start_on_preferred_port(test_cfg(dir.path()), Some(free))
+            .await
+            .unwrap();
+        assert!(!fell_back);
+        assert_eq!(handle.local_addr().port(), free);
+        handle.shutdown().await.unwrap();
+    }
+
+    #[test]
+    fn settings_antigo_sem_close_to_tray_mantem_as_outras_preferencias() {
+        // settings.json gravado antes da bandeja existir: nao pode voltar tudo ao padrao.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILENAME),
+            r#"{"default_font_size":26,"theme":"black","vault_dir":"/livros","client_only_mode":false}"#,
+        )
+        .unwrap();
+        let s = AppSettings::load(dir.path());
+        assert_eq!(s.default_font_size, 26);
+        assert_eq!(s.theme, "black");
+        assert_eq!(s.vault_dir.as_deref(), Some("/livros"));
+        assert!(s.close_to_tray, "padrao: fechar mantem na bandeja");
+    }
+
+    #[test]
+    fn close_to_tray_desligado_sobrevive_ao_salvar_e_carregar() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = AppSettings {
+            close_to_tray: false,
+            ..AppSettings::default()
+        };
+        s.save(dir.path()).unwrap();
+        assert!(!AppSettings::load(dir.path()).close_to_tray);
+    }
+
+    #[cfg(not(target_os = "android"))]
+    fn paired(cert: &str, port: u16) -> PairedServerInfo {
+        PairedServerInfo {
+            device_id: "dev_x".into(),
+            device_name: "Bookferry Desktop".into(),
+            server_name: "Bookferry PC".into(),
+            port,
+            last_good_ip: Some("127.0.0.1".into()),
+            known_ips: vec!["127.0.0.1".into()],
+            cert_sha256: cert.into(),
+            spki_sha256: "spki".into(),
+            paired_at_ms: 1,
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn pareamento_so_e_reaproveitado_para_o_mesmo_servidor_e_a_mesma_porta() {
+        let p = paired("aaaa", 47600);
+        assert!(pairing_matches_server(&p, "aaaa", 47600));
+        // certificado diferente = outro servidor (dados apagados): precisa parear de novo
+        assert!(!pairing_matches_server(&p, "bbbb", 47600));
+        // o cliente guardou a porta antiga; com outra porta ele nao conecta
+        assert!(!pairing_matches_server(&p, "aaaa", 51234));
     }
 }

@@ -70,6 +70,9 @@ rustPlatform.buildRustPackage {
 
   preFixup = ''
     gappsWrapperArgs+=(--set-default WEBKIT_DISABLE_DMABUF_RENDERER 1)
+    # O icone da bandeja carrega a libayatana-appindicator por dlopen: estar em buildInputs nao
+    # basta, ela precisa estar no LD_LIBRARY_PATH do binario embrulhado.
+    gappsWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ libayatana-appindicator ]})
   '';
 
   meta = {
