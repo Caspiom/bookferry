@@ -1744,3 +1744,90 @@ async fn a_device_talks_to_one_server_at_a_time() {
     srv_a.shutdown().await.unwrap();
     srv_b.shutdown().await.unwrap();
 }
+
+// ============================================================================
+// Livro ja baixado continua abrindo com o servidor (PC) desligado
+// ============================================================================
+
+#[tokio::test]
+async fn downloaded_book_opens_with_server_off_even_after_restarting_the_app() {
+    let tmp = TempDir::new().unwrap();
+    let srv_data = tmp.path().join("srv_data");
+    let vault_dir = tmp.path().join("vault");
+    std::fs::create_dir_all(&vault_dir).unwrap();
+    populate_sample_vault(&vault_dir);
+    let srv = start_server(test_server_config(&srv_data, &vault_dir))
+        .await
+        .unwrap();
+    let cli_dir = tmp.path().join("phone");
+    let client = Client::open(test_client_config(&cli_dir, "Celular"))
+        .await
+        .unwrap();
+    client
+        .pair(&srv.pairing_payload(), "Celular")
+        .await
+        .unwrap();
+
+    let lib = client.library().await.unwrap();
+    let book = lib
+        .books
+        .iter()
+        .find(|b| b.title.contains("Quadrinho"))
+        .unwrap();
+    let book_id = book.book_id.clone();
+    let other = lib
+        .books
+        .iter()
+        .find(|b| b.book_id != book_id)
+        .unwrap()
+        .book_id
+        .clone();
+    let downloaded_path = client.download_book(&book_id, None).await.unwrap();
+    let original_bytes = std::fs::read(&downloaded_path).unwrap();
+
+    // O PC desliga e o app do celular e fechado e reaberto (o que o Android faz o tempo todo).
+    srv.shutdown().await.unwrap();
+    client.shutdown().await.unwrap();
+    let client = Client::open(test_client_config(&cli_dir, "Celular"))
+        .await
+        .unwrap();
+
+    // Mesma sequencia que o app faz ao abrir um livro: lista, pull, decisao de retomada, posicao.
+    let started = Instant::now();
+    let snap = client.library().await.unwrap();
+    assert!(snap.stale);
+    assert_eq!(snap.books.len(), 3, "a biblioteca vem do cache local");
+    let path = client
+        .local_path(&book_id)
+        .unwrap()
+        .expect("o livro baixado segue no aparelho");
+    assert_eq!(std::fs::read(&path).unwrap(), original_bytes);
+    assert_eq!(
+        client.local_path(&other).unwrap(),
+        None,
+        "so o baixado fica local"
+    );
+
+    let _ = client.pull().await; // o app ignora o erro
+    client.decide_book_resume(&book_id).unwrap();
+    client.get_position(&book_id).await.unwrap();
+    client
+        .set_position(&book_id, "page:3", None, 30.0)
+        .await
+        .expect("salvar posicao offline nao pode falhar");
+    assert_eq!(
+        client.outbox_len().unwrap(),
+        1,
+        "fica na fila para quando o PC voltar"
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(8),
+        "abrir offline demorou {:?}",
+        started.elapsed()
+    );
+
+    // Livro NAO baixado: falha com erro claro, sem derrubar o app.
+    assert!(client.download_book(&other, None).await.is_err());
+
+    client.shutdown().await.unwrap();
+}
