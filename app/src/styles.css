@@ -2844,3 +2844,19 @@ code {
     text-align: left;
   }
 }
+
+/* Aviso: servidor fora da porta fixa (o firewall do PC so libera a fixa) */
+.port-warning {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.port-warning.hidden {
+  display: none;
+}

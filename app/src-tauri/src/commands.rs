@@ -95,6 +95,9 @@ pub struct DesktopServerRuntime {
     pub qr_created_at_ms: u64,
     pub qr_expires_at_ms: u64,
     pub initial_paired_count: usize,
+    /// `true` quando a porta fixa estava ocupada e o servidor subiu numa porta aleatoria
+    /// (o firewall do PC so libera a fixa, entao o celular nao alcancaria o servidor).
+    pub port_fallback: bool,
 }
 
 /// Estado global gerenciado pelo Tauri (`tauri::State<Arc<AppState>>`).
@@ -201,6 +204,10 @@ pub struct EmbeddedServerStatusDto {
     pub vault_dir: String,
     pub bind_addr: String,
     pub port: u16,
+    /// Porta que o servidor tenta usar (a unica liberada no firewall).
+    pub preferred_port: u16,
+    /// A porta preferida estava ocupada e o servidor esta numa porta aleatoria.
+    pub port_is_fallback: bool,
     pub cert_sha256: String,
     pub pairing_qr: Option<PairingQrViewDto>,
 }
@@ -315,6 +322,33 @@ fn build_qr_view(
     })
 }
 
+/// Sobe o servidor na porta preferida; se ela estiver ocupada, usa uma porta livre e devolve
+/// `true` no segundo item (fallback). Sem porta preferida (E2E) usa direto uma porta livre.
+#[cfg(not(target_os = "android"))]
+async fn start_on_preferred_port(
+    make_cfg: impl Fn(u16) -> ServerConfig,
+    preferred: Option<u16>,
+) -> Result<(ServerHandle, bool), String> {
+    let mut fell_back = false;
+    if let Some(port) = preferred {
+        match bookferry_server::start(make_cfg(port)).await {
+            Ok(handle) => return Ok((handle, false)),
+            Err(err) => {
+                fell_back = true;
+                tracing::warn!(
+                    port,
+                    error = %err,
+                    "porta fixa indisponivel; usando uma porta livre (o firewall pode bloquea-la para o celular)"
+                );
+            }
+        }
+    }
+    let handle = bookferry_server::start(make_cfg(0))
+        .await
+        .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?;
+    Ok((handle, fell_back))
+}
+
 #[cfg(not(target_os = "android"))]
 pub async fn start_or_restart_desktop_server(
     state: &Arc<AppState>,
@@ -359,18 +393,9 @@ pub async fn start_or_restart_desktop_server(
     };
 
     // Porta fixa 47600: é a que o firewall do PC libera (uma porta aleatória fica bloqueada para o celular).
-    // Se estiver ocupada (ou no E2E), cai para uma porta livre.
-    let handle = match (!cfg!(bookferry_e2e)).then(|| make_cfg(DEFAULT_SERVER_PORT)) {
-        Some(cfg) => match bookferry_server::start(cfg).await {
-            Ok(h) => h,
-            Err(_) => bookferry_server::start(make_cfg(0))
-                .await
-                .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?,
-        },
-        None => bookferry_server::start(make_cfg(0))
-            .await
-            .map_err(|e| format!("falha ao iniciar servidor embutido: {e}"))?,
-    };
+    // Se estiver ocupada (ou no E2E), cai para uma porta livre, e a interface avisa (`port_fallback`).
+    let preferred = (!cfg!(bookferry_e2e)).then_some(DEFAULT_SERVER_PORT);
+    let (handle, port_fallback) = start_on_preferred_port(make_cfg, preferred).await?;
 
     let bound_port = handle.local_addr().port();
 
@@ -405,6 +430,7 @@ pub async fn start_or_restart_desktop_server(
         qr_created_at_ms: now_ms,
         qr_expires_at_ms: now_ms.saturating_add(ttl_ms),
         initial_paired_count: 1,
+        port_fallback,
     };
 
     {
@@ -555,6 +581,8 @@ pub async fn build_status_dto(state: &Arc<AppState>) -> Result<AppStatusDto, Str
                 vault_dir: rt.vault_dir.to_string_lossy().to_string(),
                 bind_addr: rt.handle.local_addr().ip().to_string(),
                 port: rt.handle.local_addr().port(),
+                preferred_port: DEFAULT_SERVER_PORT,
+                port_is_fallback: rt.port_fallback,
                 cert_sha256: rt.handle.cert_sha256().to_string(),
                 pairing_qr: qr_view,
             })
@@ -1009,6 +1037,38 @@ pub async fn configure_server_vault(
         crate::desktop::refresh_tray_status(&app, port);
 
         build_status_dto(state.inner()).await
+    }
+}
+
+/// Reinicia o servidor para tentar voltar a porta fixa (usado quando ela estava ocupada).
+/// Devolve `true` se AINDA esta numa porta aleatoria. O segredo de pareamento muda.
+#[tauri::command]
+pub async fn retry_preferred_port(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<bool, String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = (app, state);
+        Err("O servidor embutido nao esta disponivel no Android".to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let vault_dir = {
+            let guard = state.desktop_server.lock().await;
+            let Some(ref rt) = *guard else {
+                return Err("Servidor desktop embutido nao esta em execucao".to_string());
+            };
+            rt.vault_dir.clone()
+        };
+        start_or_restart_desktop_server(state.inner(), vault_dir).await?;
+        let (port, still_fallback) = {
+            let guard = state.desktop_server.lock().await;
+            let rt = guard.as_ref().ok_or("servidor nao subiu")?;
+            (rt.handle.local_addr().port(), rt.port_fallback)
+        };
+        crate::desktop::refresh_tray_status(&app, Some(port));
+        Ok(still_fallback)
     }
 }
 
@@ -1513,6 +1573,49 @@ pub async fn is_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_cfg(dir: &std::path::Path) -> impl Fn(u16) -> ServerConfig + '_ {
+        move |port| {
+            let mut cfg = ServerConfig::new(dir.join("data"), dir.join("vault"));
+            cfg.bind_addr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+            cfg.port = port;
+            cfg.enable_mdns = false;
+            cfg
+        }
+    }
+
+    #[tokio::test]
+    async fn porta_preferida_ocupada_cai_para_porta_livre_e_sinaliza_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("vault")).unwrap();
+        // Ocupa uma porta do mesmo jeito que outro programa ocuparia a 47600.
+        let squatter = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+        let busy = squatter.local_addr().unwrap().port();
+
+        let (handle, fell_back) = start_on_preferred_port(test_cfg(dir.path()), Some(busy))
+            .await
+            .unwrap();
+        assert!(fell_back, "porta ocupada deve sinalizar fallback");
+        assert_ne!(handle.local_addr().port(), busy);
+        handle.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn porta_preferida_livre_e_usada_sem_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("vault")).unwrap();
+        // Descobre uma porta livre e a solta para o servidor usar.
+        let free = {
+            let l = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+            l.local_addr().unwrap().port()
+        };
+        let (handle, fell_back) = start_on_preferred_port(test_cfg(dir.path()), Some(free))
+            .await
+            .unwrap();
+        assert!(!fell_back);
+        assert_eq!(handle.local_addr().port(), free);
+        handle.shutdown().await.unwrap();
+    }
 
     #[test]
     fn settings_antigo_sem_close_to_tray_mantem_as_outras_preferencias() {

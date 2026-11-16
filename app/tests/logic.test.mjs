@@ -56,6 +56,7 @@ import {
   resolveKeyAction,
   resolveTapZone,
   sanitizeProgressPrefs,
+  portFallbackWarning,
   sanitizeReaderPrefs,
   validatePresetName,
 } from '../src/js/state.js';
@@ -923,5 +924,20 @@ describe('Tema Breu (preto) no CSS', () => {
     for (const v of ['--logo-page', '--logo-page-2', '--logo-ember', '--logo-sea']) {
       assert.match(block, new RegExp(`${v}: #ffffff;`));
     }
+  });
+});
+
+describe('portFallbackWarning', () => {
+  it('avisa, citando as duas portas, quando o servidor saiu da porta fixa', () => {
+    const msg = portFallbackWarning({ running: true, port: 41143, preferred_port: 47600, port_is_fallback: true });
+    assert.match(msg, /47600/);
+    assert.match(msg, /41143/);
+    assert.match(msg, /firewall/);
+  });
+
+  it('sem aviso quando está na porta fixa, parado ou sem servidor', () => {
+    assert.equal(portFallbackWarning({ running: true, port: 47600, preferred_port: 47600, port_is_fallback: false }), null);
+    assert.equal(portFallbackWarning({ running: false, port_is_fallback: true }), null);
+    assert.equal(portFallbackWarning(null), null);
   });
 });

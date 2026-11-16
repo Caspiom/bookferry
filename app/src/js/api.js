@@ -87,6 +87,7 @@ export const api = {
   getAutostart: () => invokeCommand('get_autostart'),
   setAutostart: (enabled) => invokeCommand('set_autostart', { enabled }),
   configureServerVault: (vaultDir) => invokeCommand('configure_server_vault', { vaultDir }),
+  retryPreferredPort: () => invokeCommand('retry_preferred_port'),
   rotatePairingQr: () => invokeCommand('rotate_pairing_qr'),
   listPairedDevices: () => invokeCommand('list_paired_devices'),
   revokePairedDevice: (deviceId) => invokeCommand('revoke_paired_device', { deviceId }),

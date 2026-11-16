@@ -701,6 +701,27 @@ function setupEventListeners() {
     }
   });
 
+  // Servidor fora da porta fixa: reinicia para tentar voltar a ela
+  document.getElementById('btn-retry-port')?.addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    try {
+      const stillFallback = await api.retryPreferredPort();
+      const st = await api.status();
+      appState.status = st;
+      await renderDesktopServerPanel(st.embedded_server);
+      showToast(
+        stillFallback
+          ? 'A porta fixa continua ocupada.'
+          : 'Servidor de volta na porta fixa. Copie o novo código de pareamento.',
+      );
+    } catch (err) {
+      showToast(`Erro ao reiniciar o servidor: ${err}`);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // Rotacionar segredo/QR de pareamento
   document.getElementById('btn-rotate-qr')?.addEventListener('click', async () => {
     try {

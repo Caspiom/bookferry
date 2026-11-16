@@ -1,7 +1,7 @@
 // Componentes de interface (toasts, modais de retomada/download, configurações e pareamento).
 
 import { api } from './api.js';
-import { formatPercent } from './state.js';
+import { formatPercent, portFallbackWarning } from './state.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -304,6 +304,12 @@ export async function renderDesktopServerPanel(embeddedServer) {
   const qrJsonInput = document.getElementById('server-qr-json');
   const vaultInput = document.getElementById('settings-vault-input');
   const serverStateBadge = document.getElementById('server-running-badge');
+
+  const portWarning = document.getElementById('server-port-warning');
+  const warningText = portFallbackWarning(embeddedServer);
+  if (portWarning) portWarning.classList.toggle('hidden', !warningText);
+  const portWarningText = document.getElementById('server-port-warning-text');
+  if (portWarningText) portWarningText.textContent = warningText || '';
 
   if (!embeddedServer || !embeddedServer.running) {
     if (serverStateBadge) {

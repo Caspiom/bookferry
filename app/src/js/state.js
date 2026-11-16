@@ -1229,3 +1229,18 @@ export function cameraErrorMessage(err) {
       return 'Não foi possível abrir a câmera. Cole o código de pareamento.';
   }
 }
+
+/**
+ * Aviso para quando o servidor embutido não está na porta fixa (a única liberada no firewall
+ * do PC), ou `null` se está tudo certo.
+ * @param {{running?: boolean, port?: number, preferred_port?: number, port_is_fallback?: boolean}|null} server
+ * @returns {string|null}
+ */
+export function portFallbackWarning(server) {
+  if (!server || !server.running || !server.port_is_fallback) return null;
+  return (
+    `A porta ${server.preferred_port} está ocupada, então o servidor subiu na ${server.port}. ` +
+    `O firewall do computador pode bloquear essa porta e o celular não conseguiria parear. ` +
+    `Feche o programa que usa a ${server.preferred_port} e tente de novo.`
+  );
+}
