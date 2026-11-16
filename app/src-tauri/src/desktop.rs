@@ -271,6 +271,8 @@ mod tests {
         assert!(server_status_text(None).contains("desligado"));
     }
 
+    // "/cfg" nao e caminho absoluto no Windows; o autostart so existe no Linux.
+    #[cfg(unix)]
     #[test]
     fn autostart_usa_xdg_config_home_quando_absoluto() {
         let p = autostart_file_path(Some(Path::new("/cfg")), Some(Path::new("/home/u"))).unwrap();
