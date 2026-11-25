@@ -387,7 +387,7 @@ dependencies = [
 
 [[package]]
 name = "bookferry-app"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bookferry-client",
  "bookferry-core",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "bookferry-client"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bookferry-core",
  "bookferry-server",
@@ -435,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "bookferry-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "getrandom 0.2.17",
  "md-5",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "bookferry-server"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "bookferry-core",
