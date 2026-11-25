@@ -29,6 +29,7 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
 bookferry-server = { path = "../../crates/bookferry-server" }
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 hyper = { workspace = true }

@@ -4,8 +4,8 @@ let protocolBaseUrl = 'bookferry://localhost';
 
 /**
  * Define a URL base do protocolo customizado informada pelo comando `status`.
- * Desktop Linux: `bookferry://localhost`
- * Android: `http://bookferry.localhost`
+ * Desktop Linux/macOS: `bookferry://localhost`
+ * Windows e Android: `http://bookferry.localhost`
  * @param {string} baseUrl
  */
 export function setProtocolBaseUrl(baseUrl) {
@@ -87,6 +87,8 @@ export const api = {
   getAutostart: () => invokeCommand('get_autostart'),
   setAutostart: (enabled) => invokeCommand('set_autostart', { enabled }),
   configureServerVault: (vaultDir) => invokeCommand('configure_server_vault', { vaultDir }),
+  // Abre o seletor de pasta do sistema; devolve o caminho ou null se a pessoa cancelar.
+  pickVaultFolder: (startDir) => invokeCommand('pick_vault_folder', { startDir: startDir || null }),
   retryPreferredPort: () => invokeCommand('retry_preferred_port'),
   rotatePairingQr: () => invokeCommand('rotate_pairing_qr'),
   listPairedDevices: () => invokeCommand('list_paired_devices'),

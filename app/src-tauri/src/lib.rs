@@ -62,6 +62,10 @@ pub fn run() {
         }
     }));
 
+    // Seletor de pasta nativo (so desktop): escolher a pasta de livros sem digitar o caminho.
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+
     // Fechar a janela esconde o app na bandeja (se o icone existir e a preferencia estiver ligada).
     #[cfg(not(target_os = "android"))]
     let builder = builder.on_window_event(|window, event| {
@@ -235,6 +239,7 @@ pub fn run() {
         commands::cbz_info,
         commands::save_settings,
         commands::configure_server_vault,
+        commands::pick_vault_folder,
         commands::retry_preferred_port,
         commands::rotate_pairing_qr,
         commands::list_paired_devices,
@@ -275,6 +280,7 @@ pub fn run() {
         commands::cbz_info,
         commands::save_settings,
         commands::configure_server_vault,
+        commands::pick_vault_folder,
         commands::retry_preferred_port,
         commands::rotate_pairing_qr,
         commands::list_paired_devices,
