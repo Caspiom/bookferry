@@ -228,7 +228,7 @@ pub struct AppStatusDto {
     /// `"desktop"` ou `"android"`
     pub platform: String,
     pub version: String,
-    /// `"bookferry://localhost"` no Linux/macOS ou `"http://bookferry.localhost"` no Android
+    /// `"bookferry://localhost"` no Linux/macOS ou `"http://bookferry.localhost"` no Android e no Windows
     pub protocol_base_url: String,
     pub paired: bool,
     pub paired_server: Option<PairedServerInfo>,
@@ -242,7 +242,9 @@ pub struct AppStatusDto {
 }
 
 pub fn current_protocol_base_url() -> &'static str {
-    if cfg!(target_os = "android") {
+    // O WebView2 (Windows) e o WebView do Android nao deixam a pagina buscar `bookferry://...`:
+    // o Tauri serve o protocolo em `http://<esquema>.localhost` nessas duas plataformas.
+    if cfg!(any(target_os = "android", windows)) {
         "http://bookferry.localhost"
     } else {
         "bookferry://localhost"
@@ -1000,6 +1002,42 @@ pub async fn save_settings(
     build_status_dto(state.inner()).await
 }
 
+/// Abre o seletor de pasta do sistema. Devolve `None` se a pessoa cancelar.
+/// `start_dir` (se for uma pasta que existe) e onde o seletor abre.
+#[tauri::command]
+pub async fn pick_vault_folder(
+    app: tauri::AppHandle,
+    start_dir: Option<String>,
+) -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = (app, start_dir);
+        Err("O seletor de pasta so existe no computador".to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let mut dialog = app
+            .dialog()
+            .file()
+            .set_title("Escolha a pasta onde ficam seus livros");
+        if let Some(dir) = start_dir.map(PathBuf::from).filter(|d| d.is_dir()) {
+            dialog = dialog.set_directory(dir);
+        }
+        // O seletor bloqueia ate a pessoa escolher; nao pode rodar na thread principal.
+        let picked = tauri::async_runtime::spawn_blocking(move || dialog.blocking_pick_folder())
+            .await
+            .map_err(|e| format!("o seletor de pasta falhou: {e}"))?;
+        match picked {
+            None => Ok(None),
+            Some(path) => path
+                .into_path()
+                .map(|p| Some(p.to_string_lossy().into_owned()))
+                .map_err(|e| format!("pasta invalida: {e}")),
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn configure_server_vault(
     app: tauri::AppHandle,
@@ -1582,6 +1620,17 @@ mod tests {
             cfg.enable_mdns = false;
             cfg
         }
+    }
+
+    #[test]
+    fn url_do_protocolo_usa_http_localhost_no_windows_e_android() {
+        // WebView2 e o WebView do Android nao buscam `bookferry://`: so `http://bookferry.localhost`.
+        let esperado = if cfg!(any(target_os = "android", windows)) {
+            "http://bookferry.localhost"
+        } else {
+            "bookferry://localhost"
+        };
+        assert_eq!(current_protocol_base_url(), esperado);
     }
 
     #[tokio::test]

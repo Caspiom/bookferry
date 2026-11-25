@@ -562,6 +562,26 @@ function setupEventListeners() {
     if (scanAbort) closeQrScan();
   });
 
+  // Seletor de pasta do sistema: preenche o campo; quem inicia/salva continua sendo o botao ao lado.
+  for (const [pickId, inputId] of [
+    ['btn-pairing-pick-vault', 'pairing-vault-input'],
+    ['btn-settings-pick-vault', 'settings-vault-input'],
+  ]) {
+    const pickBtn = document.getElementById(pickId);
+    pickBtn?.addEventListener('click', async () => {
+      const input = document.getElementById(inputId);
+      try {
+        pickBtn.disabled = true;
+        const dir = await api.pickVaultFolder(input?.value?.trim());
+        if (dir && input) input.value = dir;
+      } catch (err) {
+        showToast(`${err}`);
+      } finally {
+        pickBtn.disabled = false;
+      }
+    });
+  }
+
   // Tela de pareamento (atalho Desktop): configurar pasta de livros e auto-parear em loopback
   const pairVaultBtn = document.getElementById('btn-pairing-save-vault');
   pairVaultBtn?.addEventListener('click', async () => {
